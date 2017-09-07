@@ -1,5 +1,6 @@
 # py-cloud-parcel-model
 Cloud parcel model written in python designed to be used to simulate experiments in a cloud chamber. 
+This model is based on the underlying science of the Aerosol-Cloud-Precipitation-Interactions-Model (http://personalpages.manchester.ac.uk/staff/paul.connolly/research/acpim01.html).
 
 # v0
 Simple parcel model that calculates pressure, temperature, RH and the growth of aerosol particles into cloud drops. This version only supports the condensation of water and external mixtures of aerosol and there is no ice phase. 
