@@ -5,6 +5,10 @@ Created on Tue Aug 29 16:28:42 2017
 
 @author: mbexkes3
 """
+# Add simelements package to path so can import modules
+import sys
+sys.path.insert(0, "/home/mbexkes3/Desktop/simelements") 
+
 from numpy import ones, zeros, pi, exp, log, reshape, sqrt, tile
 from scipy.optimize import brentq
 from scipy.special import erfc
@@ -37,13 +41,15 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
     
     #------------------------------------------------------------------------------    
     def kk03(MBIN):    
-        #this functions should not be here, should be in module called functions
-        #but I can't get all the variables to be in scope
+        
          """function when root findind finds mass of aerosol(MBIN) corresponding
          to water mass (MWATGRID or MWATCENTRE)"""
-     
+         
+         rhoat = dummy_vars/c.rhow + MBIN/rhobin
+         rhoat = (dummy_vars+MBIN)/rhoat
+         
          Dd = ((MBIN*6.)/(pi*rhobin))**(1./3.)
-         Dw = (((dummy_vars+MBIN)*6.)/(pi*c.rhow))**(1./3.)
+         Dw = (((dummy_vars+MBIN)*6.)/(pi*rhoat))**(1./3.)
      
          return mult*((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-kappabin))*
                       exp((4*surface_tension(T)*c.mw)/(c.R*T*c.rhow*Dw)))-RH    
@@ -59,10 +65,11 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
             dummy_vars = MWATGRID[i]
             rhobin = rhobin2[k,i]
             kappabin = kappabin2[k,i]
-            mass_bin_edges[k,i]=brentq(kk03,1e-30,1e4,xtol=1e-100)#'dummy' in IO.f90 line 645
+            #mass_bin_edges[k,i]=solveq.zbrent(kk03,1e-30,1e4, maxniter=1000, bracket=True)
+            mass_bin_edges[k,i] = brentq(kk03,1e-30,1e4,xtol=1e-100, maxiter = 1000)#'dummy' in IO.f90 line 645
             dummy_vars = MWATCENTRE[i]
             MWAT[k,i] = dummy_vars
-            mass_bin_centre[k,i]=brentq(kk03,1e-30,1e4,xtol=1e-100)#'MBIN' in IO.f90 line 649
+            mass_bin_centre[k,i]=brentq(kk03,1e-30,1e4,xtol=1e-100, maxiter = 1000)#'MBIN' in IO.f90 line 649
             D[k,i]=(6*mass_bin_edges[k,i]/(pi*rhobin))**(1/3)
     
         D[k,-1] = D[k,nbins-1]*100 # think this is to make sure there is a big bin to catch big particles
@@ -71,6 +78,7 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
         NBIN[k,0:] = NAER[k]*0.5*(
              erfc(-(log(D[k,1:]/D_AER[k])/(sqrt(2)*sig[k])))-
              erfc(-(log(D[k,0:nbins]/D_AER[k])/(sqrt(2)*sig[k]))))
+        #there is something wrong here - this is putting too much in first bin...
         NBIN[k,0]=NAER[k]*0.5*(
             (erfc(-(log(D[k,1]/D_AER[k]/(sqrt(2)*sig[k]))))))
         
