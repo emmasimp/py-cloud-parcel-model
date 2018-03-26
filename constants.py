@@ -25,11 +25,11 @@ LV = 2.5e6
 LS = 2.837e6
 g = 9.8
 w=5
-RA = 287.05
-RV = 461.51
+RA = 287.05 # joules kg-1 K-1
+RV = 461.51 # gas constant water vapour joules kg-1 K-1
 CP = 1005
 CPV = 1870
 CPW = 4.27e3
 CPI = 2104.6e0
-eps = RA/RV
-
+#eps = RA/RV
+eps = 0.622

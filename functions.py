@@ -9,11 +9,11 @@ import numpy as np
 import constants as c
 from math import sqrt
 
-#import namelist as n
+import namelist as n 
 
 def svp_liq(T):
     """satuation vapour pressure, Buck (1996)"""
-    return 100*6.1121*np.exp(((18.678-(T-273)/234.5)*((T-273)/(257.14+(T-273)))))
+    return 100*6.1121*np.exp(((18.678-(T-273.15)/234.5)*((T-273.15)/(257.14+(T-273.15)))))
 
 def svp_ice(T):
     """saturation vapour pressure over ice """
@@ -31,6 +31,16 @@ def KA(T):
     T1 = max(T,200)
     return (5.69+0.017*(T1-273.15))*1e-3*c.JOULES_IN_A_CAL
 
+def VISCOSITY_AIR(T):
+    TC = T - 273.15
+    TC = max(TC, -200.0)
+    
+    if TC >= 0.0:
+        V = (1.7180 + 0.0049*TC)*1e-5
+    else:
+        V = (1.7180 + 0.0049*TC-1.2e-5 *TC**2)*1e-5
+    return V    
+
 def surface_tension(T):
     """surface tension of water - pruppacher and klett p130"""
     TC = T - 273.15
@@ -46,6 +56,81 @@ def surface_tension(T):
     
     return surface_tension
 
+def VENTILATION01(DIAM, RHOAT, T, P):
+    # density of air
+    RHOA = P/c.RA/T
+    # diffusivity of water vapour in air
+    D1 = Diff(T, P)
+    # conductivity of air
+    K1 = KA(T)
+    # Viscosity of air
+    ETA = VISCOSITY_AIR(T)    
+    # Kinematic viscosity
+    NU = ETA / RHOA
+    # Schmitt Numbers
+    NSc1 = NU / D1
+    NSc2 = NU / K1
+    
+    ################ terminal velocity of water drops #########################
+    DIAM2 = DIAM # temp array that can be changed
+    NRE = np.zeros(n.nbins*n.nmodes)
+    
+    DIAM2 = np.where(DIAM2 > 7000e-6,
+                     7000e-6,
+                     DIAM2)
+    MASS = np.pi/6*DIAM2**3*RHOAT
+    SIGMA = surface_tension(T)
+    
+    # Regime 3: equations 5-12, 10-146 and 10-148 from P+K
+    PHYSNUM = (SIGMA**3)*(RHOA**2)/((ETA**4)*c.g*(c.rhow-RHOA))
+    PHYS6 = PHYSNUM**(1/6)
+    
+    for d in DIAM2:
+        if d > 1070e-6:
+            BONDNUM = (4.0/3.0)*c.g*(c.rhow - RHOA)*(d**2.0)/SIGMA
+            X = np.log(BONDNUM*PHYS6)
+            Y = (-5.00015 + 5.23778*X - 2.04914*X*X+0.475294*(X**3)
+                 - 0.542819e-1*(X**4.0) + 0.23844e-2*(X**5.0))
+            NRE = PHYS6*np.exp(Y)
+            VEL = ETA * NRE/(RHOA*d)
+            CD = 8.0*MASS*c.g*RHOA/(np.pi*((d/2.0)*ETA)**2.0)
+            CD = CD / (NRE**2.0)
+        if d < 1070e-6 and d > 20e-6:
+            BESTNM = 32.0*((d/2.0)**3.0)*(c.rhow-RHOA)*RHOA*c.g/(3.0*ETA**2.0)
+            X = np.log(BESTNM)
+            Y = (-3.18657+0.992696*X-0.153193e-2*X*X
+                 -0.987059e-3*(X**3.0) - 0.578878e-3*(X**4)
+                 + 0.855176e-4*(X**5) - 0.327815e-5 * (X**6.0))
+            NRE = np.exp(Y)
+            VEL = ETA * NRE/(2.0*RHOA*(d/2.0))
+            CD = BESTNM/(NRE**2.0)
+        if d < 20e-6:
+            MFPATH = 6.6e-8 * (101325/P)*(T/293.15)
+            VEL = 2.0*((d/2.0)**2.0)*c.g*(c.rhow-RHOA)/(9.0*ETA)
+            VEL = VEL * (1.0 + 1.26 * MFPATH/ (d/2.0))
+            NRE = VEL * RHOA * d/ETA
+            CD = 8.0*MASS*c.g*RHOA/(np.pi*((d/2.0)*ETA)**2.0)
+            CD = CD/(NRE**2.0)
+            
+    VEL = np.where(np.isnan(VEL), 0.0, VEL) # replace nans with zeros
+  #############################################################################
+    
+    CALC = (NSc1**(1.0/3.0))*np.sqrt(NRE)
+    CALC = np.where(CALC > 51.4, 51.4, CALC)
+    FV = np.where(CALC < 1.4, 
+                  1.0+0.108*CALC**2,
+                  0.78+0.308*CALC)
+  
+    CALC = (NSc2**(1.0/3.0)) * np.sqrt(NRE)
+    CALC = np.where(CALC > 51.4, 51.4, CALC)
+    FH = np.where(CALC < 1.4,
+                  1.00+0.108*CALC**2,
+                  0.78+0.308*CALC)
+    return FH, FV
+
+#def VENTILATION02(MWAT, T, P, PHI, RHOI, ) # need to add ventilation of ice
+    # crystals, requires many functions and new variables to be calculated. 
+            
 def DROPGROWTHRATE(T,P,RH,RH_EQ,RHOAT,D):
     """ Jacobson 
     """
@@ -57,9 +142,9 @@ def DROPGROWTHRATE(T,P,RH,RH_EQ,RHOAT,D):
     FH = 1
     
     SVP = svp_liq(T) # so only calls function one time
-    #############
-    #place to add ventilation stuff(MICROPHYSICS line 817)
-    #############
+    
+   # FH, FV = VENTILATION01(D, RHOAT, T, P)
+       
     DSTAR = D1*FV/(RAD/(RAD+0.7*8e-8)+D1*FV/RAD/c.ALPHA_COND*sqrt(2*np.pi/c.RV/T))
     KSTAR = K1*FH/(RAD/(RAD+2.16e-7)+K1*FH/RAD/c.ALPHA_THERM/c.CP/RHOA*sqrt(2*np.pi/c.RA/T))
     DROPGROWTHRATE = DSTAR*c.LV*RH_EQ*SVP*c.rhow/KSTAR/T*(c.LV*c.mw/T/c.R-1)
@@ -73,12 +158,13 @@ def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin, molwbin):
     """
     RHOAT = MWAT/c.rhow+(mass_bin_centre/rhobin)
     RHOAT = (MWAT+(mass_bin_centre))/RHOAT
+   # RHOAT = c.rhow
     Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3)
     Dd = ((mass_bin_centre*6)/(rhobin*np.pi))**(1/3)
     KAPPA = (mass_bin_centre/rhobin*kappabin)/(mass_bin_centre/rhobin)
     sigma = surface_tension(T)
     RH_EQ = ((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
-                 np.exp((4*sigma*c.mw)/(c.R*T*RHOAT*Dw)))
+                 np.exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))
 
     return RH_EQ, RHOAT, Dw, Dd
 
@@ -151,15 +237,24 @@ def KOOPNUCLEATIONRATE(AW, T, P, nbins, nmodes):
 def ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps):
     """ calculate number of activesites per aerosol particle
         currently only for Feldspar """
-    NS = 10e0**(-0.1963e0*T + 60.2118e0)
+    NS = np.zeros([n.nmodes,n.nbins])
+    
+    for i in range(n.nmodes):
+        for j in range(n.nbins):
+            NS[i,j] = 10e0**(n.ns_1[i]*T + n.ns_2[i])
+    
+    NS = np.reshape(NS, [n.nbins*n.nmodes])
+        
     return (np.pi * (6e0 * MBIN2/(np.pi*rhobin))**(2/3))*NS
    
-def icenucleation(MWAT, MBIN2, n_aer_bin, T, P, nbins, nmodes, rhobin, kappabin, ncomps, dt):
+def icenucleation(MWAT, MBIN2, n_aer_bin, T, P, 
+                  nbins, nmodes, rhobin, kappabin, 
+                  ncomps, dt, MBIN2_ICE, YICE_old, IND1, IND2):
     """ calculate number of ice crystals nucleated this time step
         homogeneous aw -> Koop et al (2000) 
         heterogeneous ns -> Connolly et al (2012) """
         
-    YICE = np.zeros(nbins*nmodes)
+   # YICE = np.zeros(IND1)
     
     # calculate water activity
     RHOAT = MWAT/c.rhow+(MBIN2/rhobin)
@@ -177,18 +272,39 @@ def icenucleation(MWAT, MBIN2, n_aer_bin, T, P, nbins, nmodes, rhobin, kappabin,
     #P=1-exp(-J*V*t), right hand column page 3 Koop et al
     number_frozen = n_aer_bin * (1 - np.exp(-JW * (MWAT/c.rhow) * dt))
     
-    # calculate number of active sites - needs to be for each composition, just now for feldspar only
-    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps)
- 
-    # HETEROGENEOUS CRITERIA
-    NS = np.where(MWAT < 1e-22, 0.0, NS)
+    # update ice number
+    YICE = YICE_old[IND1:IND2] + number_frozen +1e-50
     
-    # number of ice in each bin
-    YICE[:] = number_frozen + (n_aer_bin-number_frozen)*(1e0-np.exp(-NS))
-     
-    return YICE
+    # update aerosol number
+    n_aer_bin = n_aer_bin - number_frozen
+    
+    # heteogeneous freezing
+    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps)
+    
+    # heterogeneous freezing criteria
+    NS[:] = np.where(MWAT < 5.23e-19 , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
+    
+    # add number of heterogeneous ice onto homogeneous ice
+    YICE = YICE + (n_aer_bin)*(1e0-np.exp(-NS))
+
+    n_aer_bin = n_aer_bin - (n_aer_bin)*(1e0-np.exp(-NS))
+    
+    # aerosol mass going into bins
+    DMAER = MBIN2_ICE*YICE_old[IND1:IND2]+YICE*MBIN2
+    
+    # mass of water going into bins
+    M01 = YICE_old[IND1:IND2]*YICE_old[:IND1]+YICE*MWAT+1e-50
+    
+    # average MWAT of frozen particles
+    M01 = M01/(YICE)
+    
+    # average aerosol mass in each bin
+    MBIN2_ICE = DMAER/(YICE)
+         
+    return M01, MBIN2_ICE, YICE, n_aer_bin, number_frozen
 
 def CAPACITANCE01(MWAT, PHI):
+    PHI = 1.0 # this makes pyACPIM agree with ACPIM
     RHOICE = c.rhoi
     VOL = np.where(MWAT > 0, MWAT/RHOICE, 1e-50)
     
@@ -224,8 +340,8 @@ def ICEGROWTHRATE(T, P, RH_ICE, RH_EQ, MWAT, AR, RAD):
     RHOA = P/c.RA/T # density of air
     D1 = Diff(T,P) # diffusivity of water vaour in air
     K1 = KA(T) # thermal conductivity of air
-    FV = 1e0
-    FH = 1e0
+    FV = 1.0 # changing these has a significant impact on total ice mass 
+    FH = 1.0 # and RH, need to add ventilation02 function to calculate FV and FH
     
     #############
     #place to add ventilation stuff(MICROPHYSICS line 817)
@@ -265,7 +381,7 @@ def aspect_ratio(T, P, RH, MICE, MICEOLD, AR, QV):
     DELTA_RHO = DELTA_RHO*P/T/c.RA
     
     RHO_DEP = DEP_DENSITY(DELTA_RHO,T)
-    print(RHO_DEP)
+    
     GAMMAICE = INHERENTGROWTH(T) #this is working
     return  AR * np.exp((GAMMAICE - 1)/(GAMMAICE + 2)*np.log(((MICE - MICEOLD)/
                                        RHO_DEP)))
@@ -273,8 +389,10 @@ def aspect_ratio(T, P, RH, MICE, MICEOLD, AR, QV):
     #                                   RHO_DEP)/QV))
     
     
+
     
-   
+
+    
    
     
 
