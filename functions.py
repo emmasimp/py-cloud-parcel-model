@@ -53,7 +53,6 @@ def surface_tension(T):
         
     surface_tension = surface_tension*c.JOULES_IN_AN_ERG # convert to J/cm2
     surface_tension = surface_tension*1e4 # convert to J/m2
-    
     return surface_tension
 
 def VENTILATION01(DIAM, RHOAT, T, P):
@@ -134,9 +133,13 @@ def VENTILATION01(DIAM, RHOAT, T, P):
 def DROPGROWTHRATE(T,P,RH,RH_EQ,RHOAT,D):
     """ Jacobson 
     """
+  
+    
     RAD = D/2.
     RHOA = P/c.RA/T
+    
     D1 = Diff(T,P)
+    
     K1 = KA(T)
     FV = 1
     FH = 1
@@ -144,10 +147,13 @@ def DROPGROWTHRATE(T,P,RH,RH_EQ,RHOAT,D):
     SVP = svp_liq(T) # so only calls function one time
     
    # FH, FV = VENTILATION01(D, RHOAT, T, P)
-       
+      
     DSTAR = D1*FV/(RAD/(RAD+0.7*8e-8)+D1*FV/RAD/c.ALPHA_COND*sqrt(2*np.pi/c.RV/T))
+    
     KSTAR = K1*FH/(RAD/(RAD+2.16e-7)+K1*FH/RAD/c.ALPHA_THERM/c.CP/RHOA*sqrt(2*np.pi/c.RA/T))
+    
     DROPGROWTHRATE = DSTAR*c.LV*RH_EQ*SVP*c.rhow/KSTAR/T*(c.LV*c.mw/T/c.R-1)
+    
     DROPGROWTHRATE = DROPGROWTHRATE+c.rhow*c.R*T/c.mw
     
     return DSTAR*(RH-RH_EQ)*SVP/RAD/DROPGROWTHRATE
@@ -156,13 +162,16 @@ def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin, molwbin):
     """ Kappa Koehler theory, Petters and Kriedenwies (2007)
         
     """
+    
     RHOAT = MWAT/c.rhow+(mass_bin_centre/rhobin)
     RHOAT = (MWAT+(mass_bin_centre))/RHOAT
    # RHOAT = c.rhow
-    Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3)
-    Dd = ((mass_bin_centre*6)/(rhobin*np.pi))**(1/3)
+    #RHOAT = 1690 
+    Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3) # nearly the same
+    Dd = ((mass_bin_centre*6)/(rhobin*np.pi))**(1/3) # exactly the same
     KAPPA = (mass_bin_centre/rhobin*kappabin)/(mass_bin_centre/rhobin)
-    sigma = surface_tension(T)
+    sigma = surface_tension(T) # 
+    
     RH_EQ = ((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
                  np.exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))
 
@@ -243,13 +252,16 @@ def ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps):
         for j in range(n.nbins):
             NS[i,j] = 10e0**(n.ns_1[i]*T + n.ns_2[i])
     
+            if n.ns_1[i] and n.ns_2[i] == 0:
+                NS[i,j] = 0.0
+   
     NS = np.reshape(NS, [n.nbins*n.nmodes])
         
     return (np.pi * (6e0 * MBIN2/(np.pi*rhobin))**(2/3))*NS
    
 def icenucleation(MWAT, MBIN2, n_aer_bin, T, P, 
                   nbins, nmodes, rhobin, kappabin, 
-                  ncomps, dt, MBIN2_ICE, YICE_old, IND1, IND2):
+                  ncomps, dt, MBIN2_ICE, YICE_old, IND1, IND2, mass_for_act, RH):
     """ calculate number of ice crystals nucleated this time step
         homogeneous aw -> Koop et al (2000) 
         heterogeneous ns -> Connolly et al (2012) """
@@ -262,32 +274,23 @@ def icenucleation(MWAT, MBIN2, n_aer_bin, T, P,
     Dw = ((MWAT + (MBIN2))*6/(np.pi*RHOAT))**(1/3)
     Dd = ((MBIN2*6)/(rhobin*np.pi))**(1/3)
     KAPPA = (MBIN2/rhobin*kappabin)/(MBIN2/rhobin)
+    
     AW = (Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))
     
     # calculate homogeneous freezing rate following Koop et al (2000)
     # JW units m^-3 s^-1
+    
     JW = KOOPNUCLEATIONRATE(AW, T, P, nbins, nmodes)
     
     # find the number of homogeneously frozen drops 
     #P=1-exp(-J*V*t), right hand column page 3 Koop et al
-    number_frozen = n_aer_bin * (1 - np.exp(-JW * (MWAT/c.rhow) * dt))
-    
+    number_frozen = np.absolute(-1*n_aer_bin * (np.exp(-JW * (MWAT/c.rhow) * dt)-1))
+    number_frozen = 0.0# switch off homogeneous freezing
     # update ice number
     YICE = YICE_old[IND1:IND2] + number_frozen +1e-50
     
     # update aerosol number
     n_aer_bin = n_aer_bin - number_frozen
-    
-    # heteogeneous freezing
-    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps)
-    
-    # heterogeneous freezing criteria
-    NS[:] = np.where(MWAT < 5.23e-19 , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
-    
-    # add number of heterogeneous ice onto homogeneous ice
-    YICE = YICE + (n_aer_bin)*(1e0-np.exp(-NS))
-
-    n_aer_bin = n_aer_bin - (n_aer_bin)*(1e0-np.exp(-NS))
     
     # aerosol mass going into bins
     DMAER = MBIN2_ICE*YICE_old[IND1:IND2]+YICE*MBIN2
@@ -296,12 +299,44 @@ def icenucleation(MWAT, MBIN2, n_aer_bin, T, P,
     M01 = YICE_old[IND1:IND2]*YICE_old[:IND1]+YICE*MWAT+1e-50
     
     # average MWAT of frozen particles
-    M01 = M01/(YICE)
+    M01 = np.where(M01 > 1e-50, M01/YICE, 1e-50) 
+    
+    # average aerosol mass in each bin
+    MBIN2_ICE = DMAER/(YICE)
+    
+    # heteogeneous freezing
+    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps)
+    
+    # heterogeneous freezing criteria
+    MWAT_CRIT = 70/6*np.pi*Dd**3*c.rhow
+    
+   # if YICE_old[-1] < 1:
+   #     NS[:] = 0.0
+    
+  #  NS[:] = np.where(MWAT < MWAT_CRIT , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
+    if RH < 1.0:
+        NS[:] = 0.0
+      
+    # add number of heterogeneous ice onto homogeneous ice
+    YICE = YICE + (n_aer_bin)*(1e0-np.exp(-NS)) # this wrong!
+    
+    n_aer_bin = n_aer_bin - (n_aer_bin)*(1e0-np.exp(-NS))
+    
+    # aerosol mass going into bins
+    DMAER = MBIN2_ICE*YICE_old[IND1:IND2]+YICE*MBIN2
+    
+    # mass of water going into bins
+    M01_2 = YICE_old[IND1:IND2]*YICE_old[:IND1]+YICE*MWAT
+    
+    
+    M01_2 = np.where(M01_2 > 1e-50, M01_2/YICE, 1e-50) 
+    # average MWAT of frozen particles
+    #M01_2 = M01_2/(YICE) # is this adding extra water mass?
     
     # average aerosol mass in each bin
     MBIN2_ICE = DMAER/(YICE)
          
-    return M01, MBIN2_ICE, YICE, n_aer_bin, number_frozen
+    return M01_2, MBIN2_ICE, YICE, n_aer_bin, number_frozen, MWAT_CRIT
 
 def CAPACITANCE01(MWAT, PHI):
     PHI = 1.0 # this makes pyACPIM agree with ACPIM
@@ -310,16 +345,6 @@ def CAPACITANCE01(MWAT, PHI):
     
     A = (3e0*VOL/(4e0*np.pi*PHI))**(1e0/3e0)
     C = A*PHI
-  
-#### IF slower than everything done in a WHERE ###############################
-  #  CAP = np.zeros_like(PHI)
-    
-   # for i in PHI:
-    #    if i < 1.0:
-     #       CAP = A*np.sqrt(1-i**2)/np.arcsin(np.sqrt(1-i**2))
-      #  else:
-       #     CAP =  C*np.sqrt(1-i**-2)/np.log((1+np.sqrt(1-i**-2))*i)
-###############################################################################
        
     CAP = (np.where(PHI < 1.0, 
                     A*np.sqrt(1-PHI**2)/np.arcsin(np.sqrt(1-PHI**2)),
@@ -342,7 +367,7 @@ def ICEGROWTHRATE(T, P, RH_ICE, RH_EQ, MWAT, AR, RAD):
     K1 = KA(T) # thermal conductivity of air
     FV = 1.0 # changing these has a significant impact on total ice mass 
     FH = 1.0 # and RH, need to add ventilation02 function to calculate FV and FH
-    
+  
     #############
     #place to add ventilation stuff(MICROPHYSICS line 817)
     #############

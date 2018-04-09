@@ -44,7 +44,7 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
         rhobin3 = n.rhoa[N_SEL]
         kappabin3 = n.k[N_SEL]
         
-        T = 280
+       # T = 280
         
         RHOAT = MWAT2/c.rhow+(mass_bin_centre/rhobin3)
         RHOAT = (MWAT2+(mass_bin_centre))/RHOAT
