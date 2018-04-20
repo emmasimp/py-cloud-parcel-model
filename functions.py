@@ -8,8 +8,11 @@ Created on Fri Aug 25 15:04:49 2017
 import numpy as np
 import constants as c
 from math import sqrt
+import variables as v
 
 import namelist as n 
+from scipy.optimize import minimize_scalar
+import bisect
 
 def svp_liq(T):
     """satuation vapour pressure, Buck (1996)"""
@@ -158,7 +161,7 @@ def DROPGROWTHRATE(T,P,RH,RH_EQ,RHOAT,D):
     
     return DSTAR*(RH-RH_EQ)*SVP/RAD/DROPGROWTHRATE
 
-def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin, molwbin):
+def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin):
     """ Kappa Koehler theory, Petters and Kriedenwies (2007)
         
     """
@@ -167,9 +170,11 @@ def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin, molwbin):
     RHOAT = (MWAT+(mass_bin_centre))/RHOAT
    # RHOAT = c.rhow
     #RHOAT = 1690 
+    
     Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3) # nearly the same
     Dd = ((mass_bin_centre*6)/(rhobin*np.pi))**(1/3) # exactly the same
-    KAPPA = (mass_bin_centre/rhobin*kappabin)/(mass_bin_centre/rhobin)
+    #KAPPA = (mass_bin_centre/rhobin*kappabin)/(mass_bin_centre/rhobin)
+    KAPPA = kappabin
     sigma = surface_tension(T) # 
     
     RH_EQ = ((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
@@ -243,49 +248,69 @@ def KOOPNUCLEATIONRATE(AW, T, P, nbins, nmodes):
     
     return (10e0**LOGJ)*1e6 # nucleation rate in m^-3 s^-1   
 
-def ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps):
+def ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps,dt):
     """ calculate number of activesites per aerosol particle
-        currently only for Feldspar """
-    NS = np.zeros([n.nmodes,n.nbins])
+        based on ns parameterisation, given INP type in namelist
+        and dictionary of coded INP types in constants.py"""
     
-    for i in range(n.nmodes):
-        for j in range(n.nbins):
-            NS[i,j] = 10e0**(n.ns_1[i]*T + n.ns_2[i])
+    NS1 = np.zeros(ncomps)
+    ACT_SITE = np.zeros([n.nmodes,n.nbins])
+    NS_out = np.zeros(n.nbins*n.nmodes)
+    M = np.reshape(MBIN2,[n.nmodes,n.nbins])
     
-            if n.ns_1[i] and n.ns_2[i] == 0:
-                NS[i,j] = 0.0
-   
-    NS = np.reshape(NS, [n.nbins*n.nmodes])
-        
-    return (np.pi * (6e0 * MBIN2/(np.pi*rhobin))**(2/3))*NS
+    for mode in range(nmodes):    
+        for i, INP_type in enumerate(c.aerosol_dict.keys()):
+
+             # if the mode is not an INP, NS = 0
+             if INP_type not in c.ns_dict:
+                 NS1[i] = 0.0
+       
+             # select the ns equation based on first value in ns_dict
+             # Equation 5 from Niemand et al (2012)
+             elif c.ns_dict[INP_type][0] == 0:
+                 NS1[i] = np.exp(c.ns_dict[INP_type][1]*(T-273.15)+c.ns_dict[INP_type][2])
+                 
+             elif c.ns_dict[INP_type][0] == 1:
+                 NS1[i] = np.exp(c.ns_dict[INP_type][3]*T+c.ns_dict[INP_type][4]*dt)
+                # ??
+             elif c.ns_dict[INP_type][0] == 2:
+                 NS1[i] = 10e0**(c.ns_dict[INP_type][1]*T + c.ns_dict[INP_type][2]) 
+            
+             elif c.ns_dict[INP_type][0] == 3:
+                 NS1[i] = 1e4*np.exp(c.ns_dict[INP_type][1]+c.ns_dict[INP_type][2]*T
+                                 +c.ns_dict[INP_type][3]*T**2
+                                 +c.ns_dict[INP_type][4]*T**3)
+                 
+             ACT_SITE[mode,:] += (np.pi *(6*M[mode,:]*n.Mass_frac[INP_type][mode]/
+                                 (np.pi*c.aerosol_dict[INP_type][1]))**(2/3))*NS1[i]    
+             #print(M[mode,:]*n.Mass_frac[INP_type][mode])
+    NS_out = np.reshape(ACT_SITE,n.nbins*n.nmodes)      
+    
+    return NS_out
    
 def icenucleation(MWAT, MBIN2, n_aer_bin, T, P, 
-                  nbins, nmodes, rhobin, kappabin, 
+                  nbins, nmodes, rhobin, KAPPA, 
                   ncomps, dt, MBIN2_ICE, YICE_old, IND1, IND2, mass_for_act, RH):
     """ calculate number of ice crystals nucleated this time step
         homogeneous aw -> Koop et al (2000) 
         heterogeneous ns -> Connolly et al (2012) """
         
-   # YICE = np.zeros(IND1)
-    
     # calculate water activity
     RHOAT = MWAT/c.rhow+(MBIN2/rhobin)
     RHOAT = (MWAT+(MBIN2))/RHOAT
     Dw = ((MWAT + (MBIN2))*6/(np.pi*RHOAT))**(1/3)
     Dd = ((MBIN2*6)/(rhobin*np.pi))**(1/3)
-    KAPPA = (MBIN2/rhobin*kappabin)/(MBIN2/rhobin)
     
     AW = (Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))
     
     # calculate homogeneous freezing rate following Koop et al (2000)
     # JW units m^-3 s^-1
-    
     JW = KOOPNUCLEATIONRATE(AW, T, P, nbins, nmodes)
     
     # find the number of homogeneously frozen drops 
     #P=1-exp(-J*V*t), right hand column page 3 Koop et al
     number_frozen = np.absolute(-1*n_aer_bin * (np.exp(-JW * (MWAT/c.rhow) * dt)-1))
-    number_frozen = 0.0# switch off homogeneous freezing
+    #number_frozen = 0.0# switch off homogeneous freezing
     # update ice number
     YICE = YICE_old[IND1:IND2] + number_frozen +1e-50
     
@@ -305,23 +330,30 @@ def icenucleation(MWAT, MBIN2, n_aer_bin, T, P,
     MBIN2_ICE = DMAER/(YICE)
     
     # heteogeneous freezing
-    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps)
+    NS = ACTIVESITES(T, MBIN2, rhobin, nbins, nmodes, ncomps,dt)
     
     # heterogeneous freezing criteria
     MWAT_CRIT = 70/6*np.pi*Dd**3*c.rhow
-    
-   # if YICE_old[-1] < 1:
-   #     NS[:] = 0.0
-    
-  #  NS[:] = np.where(MWAT < MWAT_CRIT , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
-    if RH < 1.0:
-        NS[:] = 0.0
+
+    if n.Heterogeneous_freezing_criteria.lower() == 'activation':
+        NS[:] = np.where(MWAT < mass_for_act , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
+    elif n.Heterogeneous_freezing_criteria.lower() ==  'rh':
+        if RH < 1.0:
+            NS[:] = 0.0
+    else:
+        print('heterogeneous freezing criteria unknown')
+        return
       
+    #DN01 = (n_aer_bin)*(1e0-np.exp(-NS))
+    
+    # find change in ice concentration
+    DN01 = [max(aer*(1-np.exp(-ns))-old, 0.0) for aer, ns, old in zip(n_aer_bin, NS, YICE_old[IND1:IND2])]
+    
+    # move aerosol from liquid distribution to ice distribution
+    n_aer_bin = n_aer_bin - DN01
+    
     # add number of heterogeneous ice onto homogeneous ice
-    YICE = YICE + (n_aer_bin)*(1e0-np.exp(-NS)) # this wrong!
-    
-    n_aer_bin = n_aer_bin - (n_aer_bin)*(1e0-np.exp(-NS))
-    
+    YICE = YICE + DN01
     # aerosol mass going into bins
     DMAER = MBIN2_ICE*YICE_old[IND1:IND2]+YICE*MBIN2
     
@@ -412,10 +444,89 @@ def aspect_ratio(T, P, RH, MICE, MICEOLD, AR, QV):
                                        RHO_DEP)))
    # AR = AR * np.exp((GAMMAICE - 1)/(GAMMAICE + 2)*np.log((QV + (MICE - MICEOLD)/
     #                                   RHO_DEP)/QV))
+###############################################################################
     
+def find_act_mass(aer_mass,T):
+    """ function the find the mass of water required for each particle
+        activate
+    """
+    def kk02(NW):
+        """ Kappa Koehler theory, Petters and Kriedenwies (2007)
+    """
+        MWAT = NW*c.mw
+        RH_ACT = 0
+        mass_bin_centre = brac
+   # T = output[idx,ITEMP]
+        mult = -1.0
     
+        RHOAT = MWAT/c.rhow+(brac/rhobin3)
+        RHOAT = (MWAT+(brac))/RHOAT
 
+        Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3)
+        Dd = ((mass_bin_centre*6)/(rhobin3*np.pi))**(1/3)
+        KAPPA = kappabin3
     
+        sigma = surface_tension(T)
+        RH_EQ = mult*((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
+                 np.exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))-RH_ACT
+  
+        return RH_EQ
+
+    act_mass = np.zeros([n.nbins*n.nmodes])
+    
+    for i in range(n.nmodes*n.nbins):
+        rhobin3 = v.rhobin[i]
+        kappabin3 = v.Kappa[i]
+        brac = aer_mass[i]
+
+        act_mass[i] = minimize_scalar(kk02,bracket=(brac*0.1, brac*50), method='brent', tol=1e-30).x*c.mw
+
+    return act_mass
+
+def calc_CDP_concentration(liq, aer_mass, ice, aer_mass_ice, T):
+    """ function to find the concentration of particles in CDP size bins
+    """
+    CDP_bins = [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+       16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0,
+       38.0, 40.0, 42.0, 44.0, 46.0, 48.0, 50.0]
+
+    CDP_bins = [x*1e-6 for x in CDP_bins]
+
+    CDP_conc_liq = np.zeros([len(CDP_bins)])
+    CDP_conc_ice = np.zeros([len(CDP_bins)])
+    CDP_conc_total = np.zeros_like(CDP_conc_liq)
+    
+    mass_w = liq[:v.IND1]
+    mass_ice = ice[:v.IND1]
+    
+    num_bin_liq = liq[v.IND1:v.IND2]
+    num_bin_ice = ice[v.IND1:v.IND2]
+    
+    RHOAT = (mass_w/c.rhow) + (aer_mass/v.rhobin)
+    RHOAT = (mass_w+(aer_mass))/RHOAT                            
+    DIAM = ((mass_w + (aer_mass))*6/(np.pi*RHOAT))**(1/3)
+    
+    for i in DIAM:
+        x = bisect.bisect(CDP_bins, i)
+        if x == 0: continue # stop everything going in first bin, which wont be seen by CDP
+        if x > 29: x = 29
+        CDP_conc_liq[x] = num_bin_liq[x]
+    
+    if T < 273.15:    
+        RHOAT = (mass_ice/c.rhoi) + (aer_mass_ice/v.rhobin)
+        RHOAT = (mass_ice+(aer_mass_ice))/RHOAT                            
+        DIAM_ICE = ((mass_ice + (aer_mass_ice))*6/(np.pi*RHOAT))**(1/3)
+        
+        for i in DIAM_ICE:
+            x = bisect.bisect(CDP_bins, i)
+            if x == 0: continue # stop everything going in first bin, which wont be seen by CDP
+            if x > 29: x = 29
+            CDP_conc_ice[x] = num_bin_ice[x]
+            
+    CDP_conc_total = CDP_conc_liq + CDP_conc_ice 
+    
+    
+    return CDP_conc_liq, CDP_conc_ice, CDP_conc_total
 
     
    

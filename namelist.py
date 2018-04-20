@@ -10,29 +10,40 @@ Created on Tue Aug  8 16:30:36 2017
 # This file contains values of variables that will be input from a NAMELIST 
 # =============================================================================
 
-ncomps	=9
 nbins	=70
 nmodes	=2
-nmoms	=2 # number of moments, double moment mass and number
-NAER 	=  [240e6, 	7e6, 		9200e6, 	0, 0]
-D_AER 	=  [350e-9, 	1500e-9,	70e-9, 		0, 0]
-molw_aer = [132.14e-3, 	556.57e-3,	556.57e-3,	0, 0]
-sig	=  [0.4,	0.4,		0.43, 		0, 0]
-k	=  [0.61, 	0.0061, 	0.0061, 	0, 0]
-rhoa = 	   [1770,	2560,		2560,     	0, 0]
-ns_1 =     [0,		-0.1963,	-0.1963,	0, 0]
-ns_2 =     [0,		60.2118,	60.2118,	0, 0]
-RH = 0.8
-RHint = RH
-T=260
-Tint = T
-P=99500
-Pint = P
+nmoms	=2 # number of moments, double moment mass and number, move this to variables.py
+NAER 	=  [1000e6, 	1e6, 		9200e6, 	0, 0]
+D_AER 	=  [100e-9, 1000e-9,	70e-9, 	0, 0]
+sig	    =  [0.74,	0.65,		0.43, 		0, 0]
+
+Mass_frac = {'ammonium sulphate': [1.0, 0.01],
+            'sea salt':           [0.0,   0.0],
+            'sulphuric acid':     [0,   0.0],
+            'fulvic acid':        [0,   0],
+            'Kaolinite':          [0,   0.0],
+            'Montmorinillite':    [0.0,   0.0],
+            'Feldspar':           [0.0,   0.99],
+            'Illite' :            [0,   0.0],
+            'Bio' :               [0,   0.0],
+            'test' :              [0, 0]} # to add another aerosol type change 'test' 
+                                          # to name of new aerosol type
+
+RH = 0.95
+T = 250
+P = 99500
+w = 10
+runtime = 25
+
+# choose type of simulation
+Simulation_type = 'parcel' # parcel or chamber
+
+# choose criteria for heteogeneous freezing
+Heterogeneous_freezing_criteria = 'RH' # activation or RH
+
 Dlow=10e-9
 rkm=1
 dt = 1
-w = 5
-runtime = 200
 
 #constants for chamber T and P fits
 PRESS1 = 6.2812e2

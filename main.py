@@ -7,8 +7,6 @@ Created on Fri Aug 25 14:51:12 2017
 """
 import numpy as np
 from scipy.misc import derivative
-from scipy.optimize import minimize, minimize_scalar
-from scipy.optimize import brent
 
 import matplotlib.pyplot as plt
 
@@ -18,14 +16,14 @@ from assimulo.problem import Explicit_Problem
 import constants as c
 import namelist as n
 import functions as f
-import setup_grids_cumulative_lognormal as s
+import variables as v
 
 import importlib # NOTE: need to be in the correct directory for this to work
 importlib.reload(n)
 importlib.reload(f)
-importlib.reload(s)
+#importlib.reload(c)
 
-############# SET-UP INDEXS ###################################################
+#### INDEXES ############
 IND1 = n.nbins*n.nmodes # index for mass
 IND2 = IND1*2 # index for number
 IPRESS = -3
@@ -35,60 +33,9 @@ IRH = -1
 IPRESS_ICE = -3
 ITEMP_ICE = -2
 IRH_ICE = -1
-###############################################################################
-t_final = n.runtime
-Y = np.zeros(n.nbins*n.nmodes*2+3)
-Y_AER = np.zeros([int(t_final/n.dt),IND1]) # mass of aerosol bin
-YICE_AER = np.zeros_like(Y_AER) # mass of aerosol in ice bins
+########################
 
-Y[IPRESS] = n.Pint
-Y[ITEMP] = n.Tint
-Y[IRH] = n.RHint
-
-rhobin = np.zeros(n.nmodes*n.nbins)
-kappabin = np.zeros(n.nmodes*n.nbins) # just externally mixed aerosol,  
-molwbin = np.zeros(n.nmodes*n.nbins)  # need to add mass fraction term for 
-                                      # for internally mixed aerosol
-for i in range(n.nmodes):
-    rhobin[i*n.nbins:n.nbins+n.nbins*i] = n.rhoa[i]
-    kappabin[i*n.nbins:n.nbins+n.nbins*i] = n.k[i]
-    molwbin[i*n.nbins:n.nbins+n.nbins*i] = n.molw_aer[i]
-    
-############################### set-up grid ###################################
-GRID = s.setup_grid(rhobin, kappabin, n.rkm, n.Dlow, n.nbins, 
-                    n.nmodes, n.RH, n.sig, n.NAER, n.D_AER, n.T)
-
-Y[n.nbins*n.nmodes:-3] = GRID[0] # number of aerosol in each bin
-Y[:IND1] = GRID[1]               # water mass in each bin
-Y_AER[0,:] = GRID[2]                  # mass of aerosol in each bin
-YICE_AER[0,:] = GRID[2]                 # mass of aerosol in ice bins 
-
-###############################################################################
-def kk02(NW):
-    """ Kappa Koehler theory, Petters and Kriedenwies (2007)
-        
-    """
-    MWAT = NW*c.mw
-    RH_ACT = 0
-    mass_bin_centre = brac
-    T = output[idx,ITEMP]
-    mult = -1.0
-    
-    RHOAT = MWAT/c.rhow+(brac/rhobin3)
-    RHOAT = (MWAT+(brac))/RHOAT
-
-    Dw = ((MWAT + (mass_bin_centre))*6/(np.pi*RHOAT))**(1/3)
-    Dd = ((mass_bin_centre*6)/(rhobin3*np.pi))**(1/3)
-    KAPPA = (mass_bin_centre/rhobin3*kappabin3)/(mass_bin_centre/rhobin3)
-    
-    sigma = f.surface_tension(T)
-    RH_EQ = mult*((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
-                 np.exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))-RH_ACT
-  
-    return RH_EQ
-
-
-def run_sim(Y,time,Y_AER1):
+def run_sim(Y,time,Y_AER1, YICE):
         
     def dy_dt_func(t,Y):
         dy_dt = np.zeros(len(Y))
@@ -101,15 +48,28 @@ def run_sim(Y,time,Y_AER1):
 
         # water vapour mixing ratio
         WV = c.eps*Y[IRH]*svp1/(Y[IPRESS] - svp1)
+        WL = np.sum(Y[IND1:IND2]*Y[:IND1])   # LIQUID MIXING RATIO
+        WI = np.sum(YICE[IND1:IND2]*YICE[:IND1]) # ice mixing ratio
+
+        RM=c.RA+WV*c.RV
         
-        # CHAMBER MODEL - pressure change
-        dy_dt[IPRESS] = -100*n.PRESS1*n.PRESS2*np.exp(-n.PRESS2*(time+t))
+        CPM=c.CP+WV*c.CPV+WL*c.CPW+WI*c.CPI
+        
+        if n.Simulation_type.lower() == 'chamber':
+            # CHAMBER MODEL - pressure change
+            dy_dt[IPRESS] = -100*n.PRESS1*n.PRESS2*np.exp(-n.PRESS2*(time+t))
+        elif n.Simulation_type.lower() == 'parcel':
+            # adiabatic parcel
+             dy_dt[IPRESS] = -Y[IPRESS]/RM/Y[ITEMP]*c.g*n.w #! HYDROSTATIC EQUATION
+        else:
+            print('simulation type unknown')
+            return
 
 # ----------------------------change in vapour content: -----------------------
         # 1. equilibruim size of particles
         KK01 = f.kk01(Y[0:n.nbins*n.nmodes], Y[ITEMP], Y_AER1, 
-                      rhobin, kappabin, molwbin)
-     
+                      v.rhobin, v.Kappa)
+        
         Dw = KK01[2]    # wet diameter
         RHOAT = KK01[1] # density of particles inc water and aerosol mass
         RH_EQ = KK01[0] # equilibrium diameter
@@ -128,10 +88,18 @@ def run_sim(Y,time,Y_AER1):
         # change in water vapour mixing ratio
         dwv_dt = -1*sum(Y[IND1:IND2]*dy_dt[:IND1])       
 # -----------------------------------------------------------------------------
-        
-        # CHAMBER MODEL - change in temperature
-        dy_dt[ITEMP] = -n.Temp1*n.Temp2*np.exp(-n.Temp2*(time+t))
+        if n.Simulation_type.lower() == 'chamber':
+            # CHAMBER MODEL - pressure change
+            dy_dt[ITEMP] = -n.Temp1*n.Temp2*np.exp(-n.Temp2*(time+t))
 
+        elif n.Simulation_type.lower() == 'parcel':
+            # adiabatic parcel
+            dy_dt[ITEMP] = RM/Y[IPRESS]*dy_dt[IPRESS]*Y[ITEMP]/CPM # TEMPERATURE CHANGE: EXPANSION
+            dy_dt[ITEMP] = dy_dt[ITEMP] - c.LV/CPM*dwv_dt        
+        else:
+            print('simulation type unknown')
+            return
+        
 # --------------------------------RH change------------------------------------
         dy_dt[IRH] = svp1*dwv_dt*(Y[IPRESS]-svp1)
         dy_dt[IRH] = dy_dt[IRH] + svp1*WV*dy_dt[IPRESS]
@@ -168,10 +136,6 @@ def run_sim(Y,time,Y_AER1):
     exp_sim.usejac = False
     exp_sim.maxncf = 100 # max number of convergence failures allowed by solver
     exp_sim.verbosity = 40
-    exp_sim.maxh = 0.1
-    exp_sim.dqrhomax = 10
-    exp_sim.stablimdet = True    
-
     t_output,y_output = exp_sim.simulate(1)
     
     return y_output[-1,:], t_output[:]
@@ -233,6 +197,8 @@ def run_sim_ice(Y,YLIQ):
         
         dy_dt[ITEMP_ICE] = 0.0#+c.LS/Cpm*DRI
         
+       # if n.Simulation_type.lower() == 'parcel':
+       #     dy_dt[ITEMP_ICE]=dy_dt[ITEMP_ICE] + c.LS/Cpm*DRI
 #---------------------------RH change------------------------------------------
         
         dy_dt[IRH_ICE] = (Y[IPRESS_ICE]-svp)*svp*dwv_dt
@@ -270,112 +236,52 @@ def run_sim_ice(Y,YLIQ):
     exp_sim.usejac = False
     exp_sim.maxncf = 100 # max number of convergence failures allowed by solver
     exp_sim.verbosity = 40
-    exp_sim.dqrhomax = 10
-    exp_sim.maxh = 0.1
-    exp_sim.stablimdet = True
-
+   
     t_output,y_output = exp_sim.simulate(1)
     
     return y_output[-1,:]
 
-
-
-output = np.zeros([int(t_final/n.dt),len(Y)])
-dummy = np.zeros_like(Y)
-ice_aer = np.zeros([int(t_final/n.dt),IND1])
-total_water_mass = np.zeros(len(output))
-output_ice = np.zeros([int(t_final/n.dt),IND1*3+3])
-output_ice2 = np.zeros_like(output_ice)
-output_ice2[:,IND2:-3] = 1.0 # set aspect ratio to 1
-dummy2 = np.zeros_like(Y)
-dummy4 = np.zeros_like(Y)
-ACT_DROPS = np.zeros([int(t_final/n.dt),IND1])
-test = np.zeros([int(t_final/n.dt),IND1])
-act_mass = np.zeros(IND1)
+from variables import output, output_ice, dummy2, ACT_DROPS
 
 for idx in range(len(output)):
+    # don't run if there is an error
+    if v.ERROR_FLAG:
+         break
+    # initialize output with starting values from namelist 
     if idx == 0: 
-        output[idx,:] = Y
-        if output[idx,ITEMP] < 273.15:
-            for i, dummy3 in enumerate(rhobin):
-                rhobin3 = rhobin[i]
-                kappabin3 = kappabin[i]
-                brac = Y_AER[idx,i]
-            
-                act_mass[i] = minimize_scalar(kk02,bracket=(brac*0.1, brac*50), method='brent', tol=1e-15).x*c.mw
-
-  
-            icenuc = f.icenucleation(
-                    output[idx,0:IND1],Y_AER[idx,:], output[idx,IND1:IND2], output[idx,ITEMP], 
-                    output[idx,IPRESS],n.nbins, n.nmodes, rhobin, 
-                    kappabin, n.ncomps, n.dt,YICE_AER[idx,:], output_ice[idx,:], IND1, IND2, act_mass, output[idx,IRH])
-            
-            output_ice[idx,:IND1]     = icenuc[0] # ice mass
-            YICE_AER[idx,:]           = icenuc[1] # aerosol mass in ice 
-            output_ice[idx,IND1:IND2] = icenuc[2] # ice number
-            output[idx,IND1:IND2]     = icenuc[3] # liquid number
-            
-            # initialise run_sim_ice with T,P,RH from run_sim (liquid)
-            output_ice[idx,ITEMP_ICE]  = output[idx,ITEMP]
-            output_ice[idx,IPRESS_ICE] = output[idx,IPRESS]
-            output_ice[idx,IRH_ICE]    = output[idx,IRH]
-            
-            # check things dont go negative
-            output_ice[idx,:] = np.where(output_ice[idx,:] < 0, 
-                                          1e-22,
-                                          output_ice[idx,:])
-            
-            # grow ice ------------------------------------------------------------
-            dummy2[:IND2] = output[idx,:IND2] # liquid mass and drop/aerosol number
-            dummy2[-3:] = output[idx,-3:] # pressure, temperature and RH
-            
-            output_ice[idx,:] = run_sim_ice(output_ice[idx,:],dummy2)
-            # ----------------------------------------------------------------------
-            
-            # check things dont go negative
-            output_ice[idx,:] = np.where(output_ice[idx,:] < 0,
-                                         0.0,
-                                         output_ice[idx,:])
-            
-            # change RH and Temp due to ice formation and growth
-            output[idx,IRH]   = output_ice[idx,IRH_ICE]
-            output[idx,ITEMP] = output_ice[idx,ITEMP_ICE]
+        output[idx,:] = v.Y
     else:
         # solve warm cloud ODEs
-        output[idx,:], test_time = run_sim(output[idx-1,:],(idx-1), Y_AER[idx-1,:])
-       
-        Y_AER[idx,:] = Y_AER[idx-1,:]
+        output[idx,:], test_time = run_sim(output[idx-1,:],(idx-1), v.Y_AER[idx-1,:], output_ice[idx-1,:])
+        # update number of aerosol particles in bins
+        v.Y_AER[idx,:] = v.Y_AER[idx-1,:]
 # -------------------- calculate the number of activated drops ----------------------
-        # 1. calculate mass for activation
-        act_mass = np.zeros(IND1)
-       
-        for i, dummy3 in enumerate(rhobin):
-            rhobin3 = rhobin[i]
-            kappabin3 = kappabin[i]
-            brac = Y_AER[idx,i]
-            
-            act_mass[i] = minimize_scalar(kk02,bracket=(brac*0.1, brac*50), method='brent', tol=1e-15).x*c.mw
-
+        # 1. find mass for activation
+        ACT_MASS = f.find_act_mass(v.Y_AER[idx,:], output[idx,ITEMP])
         # 2. find the number of aerosol with water mass greater than mass for activation 
-        ACT_DROPS[idx,:] = np.where(output[idx,:IND1] > act_mass, 
-                                    output[idx,IND1:IND2], 
-                                    0.0)
+        ACT_DROPS[idx,:] = np.where(output[idx,:IND1] > ACT_MASS, 
+                                    output[idx,IND1:IND2], 0.0)
+# ------calculate the number of particles in CDP size bins --------------------
+        v.CDP_CONC_liq[idx,:], v.CDP_CONC_ice[idx,:], v.CDP_CONC_total[idx,:] = f.calc_CDP_concentration(
+                    output[idx,:IND2], v.Y_AER[idx,:], 
+                    output_ice[idx,:IND2], v.YICE_AER[idx,:], output[idx,ITEMP])
+          
 # ---------------------------------------------------------------------------------------      
         # calculate ice if below zero degrees
         if output[idx,ITEMP] < 273.15:
             # 1. find the number of particles that freeze
             icenuc = f.icenucleation(
-                    output[idx,0:IND1],Y_AER[idx-1,:], output[idx,IND1:IND2], output[idx,ITEMP], 
-                    output[idx,IPRESS],n.nbins, n.nmodes, rhobin, 
-                    kappabin, n.ncomps, n.dt,YICE_AER[idx-1,:], output_ice[idx-1,:], IND1, IND2, act_mass, output[idx,IRH])
+                    output[idx,0:IND1],v.Y_AER[idx-1,:], output[idx,IND1:IND2], output[idx,ITEMP], 
+                    output[idx,IPRESS],n.nbins, n.nmodes, v.rhobin, 
+                    v.Kappa, v.ncomps, n.dt,v.YICE_AER[idx-1,:], output_ice[idx-1,:], IND1, IND2, ACT_MASS, output[idx,IRH])
             
             output_ice[idx,:IND1]     = icenuc[0] # ice mass
-            YICE_AER[idx,:]           = icenuc[1] # aerosol mass in ice 
+            v.YICE_AER[idx,:]         = icenuc[1] # aerosol mass in ice 
             output_ice[idx,IND1:IND2] = icenuc[2] # ice number
             output[idx,IND1:IND2]     = icenuc[3] # liquid number
-            Y_AER[idx,:] = Y_AER[idx-1,:]
+            v.Y_AER[idx,:] = v.Y_AER[idx-1,:]
             
-            
+
             # initialise run_sim_ice with T,P,RH from run_sim (liquid)
             output_ice[idx,ITEMP_ICE]  = output[idx,ITEMP]
             output_ice[idx,IPRESS_ICE] = output[idx,IPRESS]
@@ -401,46 +307,53 @@ for idx in range(len(output)):
             output[idx,IRH]   = output_ice[idx,IRH_ICE]
             output[idx,ITEMP] = output_ice[idx,ITEMP_ICE]
             
-            # melting -> move melted water to liquid - TO DO
-            
-            print('time is = ',idx)
-            
-        # check conserve mass, total_water_mass should be constant   
-        total_water_mass[idx] = (sum(output_ice[idx,0:IND1]*output_ice[idx,IND1:IND2])+
-                                 sum(output[idx,0:IND1]*output[idx,IND1:IND2])+(
-                                 c.eps*output[idx,IRH]*f.svp_liq(output[idx,ITEMP])/(output[idx,IPRESS]
-                                 - f.svp_liq(output[idx,ITEMP])*output[idx,IRH]))/1000)# think vapour was in g/kg, /1000 now in kg/kg, but what is mass of bins units? - 04/01/18
-fig = plt.figure()
-    
-ax1 = fig.add_subplot(221)
-ax1.plot(np.sum(ACT_DROPS, axis=1)/1e6,label='py')
-#ax1.plot(nc['TIMES'],nc['NDROP'][:,0,0,0]/1e6, label = 'ACPIM')
-ax1.set_title('Activated Drops')
-ax1.set_ylabel('# cm$^{-3}$')
-ax1.legend()
-# 
-ax2 = fig.add_subplot(222)
-ax2.plot(np.sum(output_ice[:,IND1:IND2], axis=1)/1e6)
-#ax2.plot(nc['TIMES'],nc['NICE'][:,0,0,0]/1e6)
-# ax2.plot(obs)
-ax2.set_title('Ice Number Concentration')
-ax1.set_ylabel('# cm$^{-3}$')
-# 
-ax3 = fig.add_subplot(223)
-ax3.plot(output[:,IRH])
-#ax3.plot(nc['TIMES'],nc['RH'][:,0,0,0])
-ax3.set_title('RH')
-ax3.set_xlabel('Time (s)')
-# 
-ax4 = fig.add_subplot(224)
-ax4.plot(output[:,ITEMP]-273.15)
-#ax4.plot(nc['TIMES'],nc['TEMP'][:,0,0,0]-273.15)
-ax4.set_title('Temperature')
-ax4.set_xlabel('Time (s)')
-# 
-plt.savefig('output.pdf')
-plt.tight_layout()
-plt.show()
+            # melting 
+        if output[idx,ITEMP] > 273.15:
+            output[idx,:IND1] = output_ice[idx,:IND1] + output[idx,:IND1]
+            output_ice[idx,IND1:IND2] = 0.0
+            v.Y_AER[idx,:] = v.Y_AER[idx,:] + v.YICE_AER[idx,:]
+            v.YICE_AER[idx,:] = 0.0
+        if np.sum(output_ice[idx,IND1:IND2],axis=0) > 1:
+            v.CDP_CONC_liq[idx,:], v.CDP_CONC_ice[idx,:], v.CDP_CONC_total[idx,:] = f.calc_CDP_concentration(
+                    output[idx,:IND2], v.Y_AER[idx,:], 
+                    output_ice[idx,:IND2], v.YICE_AER[idx,:], output[idx,ITEMP])
+        
+        print('time is = ',idx)
+
+# plotting output
+if not v.ERROR_FLAG:            
+    fig = plt.figure()
+        
+    ax1 = fig.add_subplot(221)
+    ax1.plot(np.sum(ACT_DROPS, axis=1)/1e6,label='py')
+   # ax1.plot(nc['TIMES'],nc['NDROP'][:,0,0,0]/1e6, label = 'ACPIM')
+    ax1.set_title('Activated Drops')
+    ax1.set_ylabel('# cm$^{-3}$')
+    #ax1.legend()
+    # 
+    ax2 = fig.add_subplot(222)
+    ax2.plot(np.sum(output_ice[:,IND1:IND2], axis=1)/1e6)
+    #ax2.plot(nc['TIMES'],nc['NICE'][:,0,0,0]/1e6)
+    # ax2.plot(obs)
+    ax2.set_title('Ice Number Concentration')
+    ax1.set_ylabel('# cm$^{-3}$')
+    # 
+    ax3 = fig.add_subplot(223)
+    ax3.plot(output[:,IRH])
+    #ax3.plot(nc['TIMES'],nc['RH'][:,0,0,0])
+    ax3.set_title('RH')
+    ax3.set_xlabel('Time (s)')
+    # 
+    ax4 = fig.add_subplot(224)
+    ax4.plot(output[:,ITEMP]-273.15)
+    #ax4.plot(nc['TIMES'],nc['TEMP'][:,0,0,0]-273.15)
+    ax4.set_title('Temperature')
+    ax4.set_xlabel('Time (s)')
+    # 
+    plt.tight_layout()
+    plt.savefig('output.pdf')
+
+    plt.show()
 # =============================================================================
 
 
@@ -473,3 +386,6 @@ plt.show()
 # 06/04/2018 ------------------------------------------------------------------
 # BUG - too much ice and too high RH at low temperatures (< -25C)
 # FIX - moved calculation of capacitance to inside dy_dt_func
+# 12/04/18 --------------------------------------------------------------------
+# Added internally mixed aerosol capabilities.
+# Added new module variables where variables are set up

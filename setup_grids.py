@@ -6,25 +6,29 @@ Created on Tue Jan 16 10:59:23 2018
 @author: mbexkes3
 """
 from numpy import zeros, pi, exp, log, reshape, sqrt
-from scipy.optimize import brentq, brent
-from scipy.special import erfc, erfinv
+from scipy.optimize import brentq
+from scipy.special import erfc
 
 import constants as c
 import namelist as n
-from functions import surface_tension
+#import variables as v
 
+#from functions import surface_tension
+def surface_tension(T):
+    """surface tension of water - pruppacher and klett p130"""
+    TC = T - 273.15
+    TC = max(TC, -40)
+    surface_tension = (75.93 + 0.115*TC + 6.818e-2*TC**2 +
+                       6.511e-3*TC**3 + 2.933e-4*TC**4 +
+                       6.283e-6*TC**5 + 5.285e-8*TC**6)
+    if TC > 0:
+        surface_tension = 76.1 - 0.155*TC
+        
+    surface_tension = surface_tension*c.JOULES_IN_AN_ERG # convert to J/cm2
+    surface_tension = surface_tension*1e4 # convert to J/m2
+    return surface_tension
 
-def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,T):
-  #  rhobin = n.rhoa
-  #  kappabin = n.k
-  #  nbins = n.nbins
-  #  nmodes = n.nmodes
-    
-    RH = n.RHint
-    sig = n.sig
-    NAER = n.NAER
-    D_AER = n.D_AER
-    
+def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,T, rhoa, k):
     #set - up some variables
     D = zeros(n.nbins+1)
     NBIN = zeros([n.nmodes, n.nbins])
@@ -41,24 +45,22 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
         """
         mass_bin_centre = MBIN[N_SEL, N_SEL2]
        
-        rhobin3 = n.rhoa[N_SEL]
-        kappabin3 = n.k[N_SEL]
-        
-       # T = 280
-        
+        rhobin3 = rhoa[N_SEL]
+        kappabin3 = k[N_SEL]
+                
         RHOAT = MWAT2/c.rhow+(mass_bin_centre/rhobin3)
         RHOAT = (MWAT2+(mass_bin_centre))/RHOAT
-        #RHOAT = c.rhow
+
         Dw = ((MWAT2 + (mass_bin_centre))*6/(pi*RHOAT))**(1/3)
         Dd = ((mass_bin_centre*6)/(rhobin3*pi))**(1/3)
-        KAPPA = (mass_bin_centre/rhobin3*kappabin3)/(mass_bin_centre/rhobin3)
+        #KAPPA = (mass_bin_centre/rhobin3*kappabin3)/(mass_bin_centre/rhobin3)
+        KAPPA = kappabin3
         
         sigma = surface_tension(T)
         RH_EQ = (((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
                      exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))-RH_ACT)
     
         return RH_EQ
-
     
     for I1 in range(nmodes):
         DUMMY = NAER[I1]/nbins
@@ -76,7 +78,7 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
             NBIN[I1, J1] = (NAER[I1]*(0.5*erfc(-log(D[J1]/D_AER[I1])/sqrt(2.0)/sig[I1])-
                 0.5*erfc(-log(D[J1-1]/D_AER[I1])/sqrt(2.0)/sig[I1])))
         
-            MBIN[I1,:] = pi/6*D[:-1]**3*n.rhoa[I1]
+            MBIN[I1,:] = pi/6*D[:-1]**3*rhoa[I1]
    
     for I1 in range(nmodes):
         for J1 in range(nbins):
@@ -93,4 +95,5 @@ def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,
     MWAT = reshape(MWAT, nmodes*nbins)
 
     MBIN = reshape(MBIN, nmodes*nbins)
-    return NBIN, MWAT, MBIN        
+    return NBIN, MWAT, MBIN     
+
