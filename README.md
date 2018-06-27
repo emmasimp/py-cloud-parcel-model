@@ -10,7 +10,7 @@ How to use:
 3. results are plotted in 'output.pdf'
 
 How to use gui:
-1. from command line run $ python pyacpim_gui_v0.oy
+1. from command line run $ python pyacpim_gui_v0.py
 2. fill in gui form with initial conditions to run model
 3. plot output from model run using 'plot' button in gui
 ![Alt text](./gui_screenshot.png?raw=true "Title")
