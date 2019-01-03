@@ -1,92 +1,100 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Aug 29 16:28:42 2017
+Created on Tue Jan 16 10:59:23 2018
 
 @author: mbexkes3
 """
-# Add simelements package to path so can import modules
-import sys
-sys.path.insert(0, "/home/mbexkes3/Desktop/simelements") 
-
-from numpy import ones, zeros, pi, exp, log, reshape, sqrt, tile
+from numpy import zeros, pi, exp, log, reshape, sqrt,array
 from scipy.optimize import brentq
 from scipy.special import erfc
 
 import constants as c
-from functions import surface_tension
+#import namelist as n
+#import variables as v
+
+#from functions import surface_tension
+def surface_tension(T):
+    """surface tension of water - pruppacher and klett p130"""
+    TC = T - 273.15
+    TC = max(TC, -40)
+    surface_tension = (75.93 + 0.115*TC + 6.818e-2*TC**2 +
+                       6.511e-3*TC**3 + 2.933e-4*TC**4 +
+                       6.283e-6*TC**5 + 5.285e-8*TC**6)
+    if TC > 0:
+        surface_tension = 76.1 - 0.155*TC
+        
+    surface_tension = surface_tension*c.JOULES_IN_AN_ERG # convert to J/cm2
+    surface_tension = surface_tension*1e4 # convert to J/m2
+    return surface_tension
+
+def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,T, rhoa, k):
+    #set - up some variables
+    
+    D = zeros(nbins+1)
+    NBIN = zeros([nmodes, nbins])
+    MBIN = zeros([nmodes, nbins])
+    MWAT = zeros([nmodes, nbins])
 
 
-def setup_grid(rhobin, kappabin, rkm, Dlow, nbins, nmodes, RH, sig, NAER, D_AER,T):
-    rhobin2 = reshape(rhobin, [nmodes, nbins])
-    kappabin2 = reshape(kappabin, [nmodes, nbins])
-    
-    ########### Set-up water mass grid ############################################
-    MWATGRID = ones((nbins+1)) # mass of water bin edges
-    MWATCENTRE = ones((nbins)) # mass of water bin centre
-    
-    mass_bin_edges = zeros([nmodes,nbins]) # mass of aerosol bin edges
-    mass_bin_centre = zeros([nmodes,nbins]) #mass of aerosol bin centre
-    
-    D = zeros([nmodes,nbins+1]) # dry diameter of aerosol bin edges
-    NBIN = zeros([nmodes,nbins]) # number of aerosol in each bin
-    MWAT = zeros([nmodes,nbins]) # mass of water each bin
-    
-    # calculate water mass at bin edges
-    for i, dummy in enumerate(MWATGRID):
-        MWATGRID[i] = pi/6*Dlow**3*c.rhow*2**(i/rkm)
-    
-    # calculate water mass at bin centers
-    MWATCENTRE = 0.5*(MWATGRID[0:nbins]+MWATGRID[1:nbins+1])
-    
-    #------------------------------------------------------------------------------    
-    def kk03(MBIN):    
+    def FIND_ERFCINV(x):
+        return DUMMY_VARS-erfc(x)
+
+    def kk02(MWAT2):
+        """ Kappa Koehler theory, Petters and Kriedenwies (2007)
+            
+        """
+        mass_bin_centre = MBIN[N_SEL, N_SEL2]
+       
+        rhobin3 = rhoa[N_SEL]
+        kappabin3 = k[N_SEL]
+                
+        RHOAT = MWAT2/c.rhow+(mass_bin_centre/rhobin3)
+        RHOAT = (MWAT2+(mass_bin_centre))/RHOAT
+
+        Dw = ((MWAT2 + (mass_bin_centre))*6/(pi*RHOAT))**(1/3)
+        Dd = ((mass_bin_centre*6)/(rhobin3*pi))**(1/3)
+        #KAPPA = (mass_bin_centre/rhobin3*kappabin3)/(mass_bin_centre/rhobin3)
+        KAPPA = kappabin3
         
-         """function when root findind finds mass of aerosol(MBIN) corresponding
-         to water mass (MWATGRID or MWATCENTRE)"""
-         
-         rhoat = dummy_vars/c.rhow + MBIN/rhobin
-         rhoat = (dummy_vars+MBIN)/rhoat
-         
-         Dd = ((MBIN*6.)/(pi*rhobin))**(1./3.)
-         Dw = (((dummy_vars+MBIN)*6.)/(pi*rhoat))**(1./3.)
-     
-         return mult*((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-kappabin))*
-                      exp((4*surface_tension(T)*c.mw)/(c.R*T*c.rhow*Dw)))-RH    
-                      
-      #------------------------------------------------------------------------------
+        sigma = surface_tension(T)
+        RH_EQ = (((Dw**3-Dd**3)/(Dw**3-Dd**3*(1-KAPPA))*
+                     exp((4*sigma*c.mw)/(c.R*T*c.rhow*Dw)))-RH_ACT)
     
-    #values for root finding
-    mult = 1
+        return RH_EQ
     
-    # find aerosol mass that corresponds to water mass at bin edges and bin centres
-    for k in range(nmodes):
-        for i in range(nbins):
-            dummy_vars = MWATGRID[i]
-            rhobin = rhobin2[k,i]
-            kappabin = kappabin2[k,i]
-            #mass_bin_edges[k,i]=solveq.zbrent(kk03,1e-30,1e4, maxniter=1000, bracket=True)
-            mass_bin_edges[k,i] = brentq(kk03,1e-30,1e4,xtol=1e-100, maxiter = 1000)#'dummy' in IO.f90 line 645
-            dummy_vars = MWATCENTRE[i]
-            MWAT[k,i] = dummy_vars
-            mass_bin_centre[k,i]=brentq(kk03,1e-30,1e4,xtol=1e-100, maxiter = 1000)#'MBIN' in IO.f90 line 649
-            D[k,i]=(6*mass_bin_edges[k,i]/(pi*rhobin))**(1/3)
-    
-        D[k,-1] = D[k,nbins-1]*100 # think this is to make sure there is a big bin to catch big particles
-    
-    #now put aerosol in bins
-        NBIN[k,0:] = NAER[k]*0.5*(
-             erfc(-(log(D[k,1:]/D_AER[k])/(sqrt(2)*sig[k])))-
-             erfc(-(log(D[k,0:nbins]/D_AER[k])/(sqrt(2)*sig[k]))))
-        #there is something wrong here - this is putting too much in first bin...
-        NBIN[k,0]=NAER[k]*0.5*(
-            (erfc(-(log(D[k,1]/D_AER[k]/(sqrt(2)*sig[k]))))))
+    for I1 in range(nmodes):
+        DUMMY = NAER[I1]/nbins
+        D[0] = 5e-9
+        NBIN[I1, 0] = NAER[I1]*0.5*erfc(-(log(D[0]/D_AER[I1])/sqrt(2)/sig[I1]))
         
-    NBIN2 = reshape(NBIN,nmodes*nbins)
-    MWATGRID = tile(MWATGRID, nmodes)
+        for J1 in range(1, nbins):
+            D[J1] = (DUMMY+NAER[I1]*0.5*
+                     erfc(-(log(D[J1-1]/D_AER[I1])/sqrt(2)/sig[I1])))
+            DUMMY_VARS = 2/NAER[I1]*D[J1]
+            DUMMY_VARS = min(DUMMY_VARS, 2-1e-10)
+            DUMMY2 = brentq(FIND_ERFCINV, -1e10, 1e10, xtol=1e-30)
+            D[J1] = exp(-DUMMY2*sig[I1]*sqrt(2)+log(D_AER[I1]))
+            
+            NBIN[I1, J1] = (NAER[I1]*(0.5*erfc(-log(D[J1]/D_AER[I1])/sqrt(2.0)/sig[I1])-
+                0.5*erfc(-log(D[J1-1]/D_AER[I1])/sqrt(2.0)/sig[I1])))
+        
+            MBIN[I1,:] = pi/6*D[:-1]**3*rhoa[I1]
+   
+    for I1 in range(nmodes):
+        for J1 in range(nbins):
+            N_SEL = I1
+            N_SEL2 = J1
+          
+            MULT = -1
+         
+            MULT = 1
+            RH_ACT = min(RH, 0.999)
+            MWAT[I1, J1] = brentq(kk02, -1e-30, 1e10, xtol=1e-30, maxiter=500)
+            
+    NBIN = reshape(NBIN, nmodes*nbins)
     MWAT = reshape(MWAT, nmodes*nbins)
-    D = reshape(D, nbins*nmodes+nmodes)
-    mass_bin_edges = reshape(mass_bin_edges, nmodes*nbins)
-    mass_bin_centre = reshape(mass_bin_centre, nmodes*nbins)
-    
-    return NBIN2, MWATGRID, MWAT, D, mass_bin_edges, mass_bin_centre
+
+    MBIN = reshape(MBIN, nmodes*nbins)
+    return NBIN, MWAT, MBIN, D     
+
