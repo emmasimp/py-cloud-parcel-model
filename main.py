@@ -56,6 +56,7 @@ IRH_ICE = -1
 def run_sim(Y,time,Y_AER1, YICE):
         
     def dy_dt_func(t,Y):
+
         dy_dt = np.zeros(len(Y))
         svp1 = f.svp_liq(Y[ITEMP])
 
@@ -84,8 +85,9 @@ def run_sim(Y,time,Y_AER1, YICE):
 # ----------------------------change in vapour content: -----------------------
         # 1. equilibruim size of particles
      #   if n.SV_flag:
-        Kappa = np.reshape(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]),[n.nbins*n.nmodes])
-       # test = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])
+     
+        Kappa = np.reshape(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]),[n.nbins*n.nmodes]) # this isnt working with n_sv > 1
+        # test = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])
       #  else:
        #     output[idx,INDSV1:INDSV2] = 0.0
       #      Kappa = np.reshape(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]),[n.nbins*n.nmodes])
@@ -93,19 +95,17 @@ def run_sim(Y,time,Y_AER1, YICE):
      #   print(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]))    
         KK01 = f.kk01(Y[0:IND1], Y[ITEMP], Y_AER1, 
                       rhobin, Kappa)
-        
         Dw = KK01[2]    # wet diameter
         RHOAT = KK01[1] # density of particles inc water and aerosol mass
         RH_EQ = KK01[0] # equilibrium diameter
-    
+
         # 2. growth rate of particles, Jacobson p455
         # rate of change of radius
         
         growth_rate = f.DROPGROWTHRATE(Y[ITEMP],Y[IPRESS],SL,RH_EQ,RHOAT,Dw)
-        
         growth_rate[np.isnan(growth_rate)] = 0# get rid of nans
         growth_rate = np.where(Y[IND1:IND2] < 1e-9, 0.0, growth_rate)
-        
+
         # 3. Mass of water condensing
         # change in mass of water per particle
         dy_dt[:IND1] = (np.pi*RHOAT*Dw**2)* growth_rate 
@@ -114,7 +114,7 @@ def run_sim(Y,time,Y_AER1, YICE):
         # change in water vapour mixing ratio
         dwv_dt = -1*sum(Y[IND1:IND2]*dy_dt[:IND1]) # change to np.sum for speed  
 # -----------------------------------------------------------------------------
-        
+
         if simulation_type.lower() == 'chamber':
             # CHAMBER MODEL - pressure change
             dy_dt[ITEMP] = -Temp1*Temp2*np.exp(-Temp2*(time+t))
@@ -134,33 +134,35 @@ def run_sim(Y,time,Y_AER1, YICE):
                      WV*Y[IPRESS]*derivative(f.svp_liq,Y[ITEMP],dx=1.0)
                      *dy_dt[ITEMP])
         dy_dt[IRH] = dy_dt[IRH]/(c.eps*svp1**2)
+
 # -----------------------------------------------------------------------------
         
 # ------------------------------ SEMI-VOLATILES -------------------------------
         if n.SV_flag: # WARNING ONLY WORKS WITH ONE MODE AND ONE SV COMPOSITION !!!!!!!!!!!!
-        
-            SV_mass = np.reshape(Y[INDSV1:INDSV2],[n.n_sv,n.nmodes, n.nbins])
-            
-        #    total_mass = Y_AER1 + sum([SV_mass[comp,:,:] for comp in range(n.n_sv)])
-            total_mass = Y_AER1 + np.sum(SV_mass,axis=0)
+            SV_mass = np.reshape(Y[INDSV1:INDSV2],[n.n_sv,n.nmodes*n.nbins])
 
-            ave_molwbin = ((Y_AER[0,:]/total_mass)*molwbin) + [(SV_mass[i, :]/total_mass)*c.semi_vol_dict[key][0] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]         
-            ave_rhobin = ((Y_AER[0,:]/(total_mass+Y[:IND1]))*rhobin + (Y[:IND1]/(total_mass+Y[:IND1]))*c.mw) +[(SV_mass[i, :]/(total_mass+Y[:IND1]))*c.semi_vol_dict[key][1] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]
-            
+          #  total_mass = Y_AER1 + sum([SV_mass[comp,:,:] for comp in range(n.n_sv)]) 
+           # total_mass = np.reshape(np.reshape(Y_AER1,[n.nmodes,n.nbins]) + np.sum(SV_mass,axis=1),[n.nbins*n.nmodes]) # this needs checking!!!!!
+            total_mass = Y_AER1 + np.sum(SV_mass,axis=0)
+    #        SV_mass = np.reshape(Y[INDSV1:INDSV2],[n.n_sv,n.nbins*n.nmodes])
+
+            ave_molwbin = ((Y_AER1/total_mass)*molwbin) + [(SV_mass[i, :]/total_mass)*c.semi_vol_dict[key][0] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]         
+            ave_rhobin = ((Y_AER1/(total_mass+Y[:IND1]))*rhobin + (Y[:IND1]/(total_mass+Y[:IND1]))*c.mw) +[(SV_mass[i, :]/(total_mass+Y[:IND1]))*c.semi_vol_dict[key][1] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]
+
             RH_EQ_SV = f.K01SV(Y[:IND1],Y[ITEMP],Y_AER1, Y[INDSV1:INDSV2], 
                               n.n_sv, ave_rhobin, nubin, ave_molwbin, IND1)
             RH_EQ = RH_EQ_SV[0]
             RHOAT = RH_EQ_SV[1]
             DW = RH_EQ_SV[2]
-            
+
             SVP_ORG = f.SVP_GASES(c.semi_vol_dict,Y[ITEMP], n.n_sv)
-            
+
             RH_ORG = [x*Y[IPRESS]/c.RA/Y[ITEMP] for x in Y[IRH_SV]]
             RH_ORG = [(x/c.semi_vol_dict[key][0])*c.R*Y[ITEMP] for x, key in zip(Y[IRH_SV],list(c.semi_vol_dict.keys())[0:n.n_sv])] # just for n_sv keys in dictionary
             RH_ORG = [RH_ORG[x]/SVP_ORG[x] for x in range(n.n_sv)]
-            
             dy_dt[INDSV1:INDSV2] = f.SVGROWTHRATE(Y[ITEMP], Y[IPRESS], SVP_ORG,
-                                  RH_ORG, RH_EQ,DW, n.n_sv)[0][0]
+                                                  RH_ORG, RH_EQ[0],DW, n.n_sv)#[0][0] # this isnt working with n_sv > 1
+            
             dy_dt[IRH_SV] = -np.sum(np.reshape(dy_dt[INDSV1:INDSV2],[n.n_sv,IND1])*Y[IND1:IND2],axis=1)
 
         return dy_dt

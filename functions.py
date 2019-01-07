@@ -554,7 +554,8 @@ def K01SV(MWAT, T, mass_bin_centre, MSV,n_sv, rhobin, nubin, molwbin,IND1):
     
     RH_EQ = [np.exp((4*c.semi_vol_dict[key][0]*sigma)/(c.R*T*(RHOAT/Dw))) for key in list(c.semi_vol_dict.keys())[:n_sv]]
     frac = 1/(nw + ((mass_bin_centre*nubin)/molwbin))
-    RH_EQ2 = [(RH_EQ[i]*(np.reshape(MSV,[n_sv,IND1])[i,:]*c.semi_vol_dict[key][2])/c.semi_vol_dict[key][0])*frac for key, i in zip(list(c.semi_vol_dict.keys())[:n_sv],range(n_sv))]
+    RH_EQ2 = [(RH_EQ[i]*(np.reshape(MSV,[n_sv,IND1])[i,:]*c.semi_vol_dict[key][2])/c.semi_vol_dict[key][0])*frac 
+              for key, i in zip(list(c.semi_vol_dict.keys())[:n_sv],range(n_sv))]
     
   #  RH_EQ[i,:]*MSV*c.semi_vol_dict[key][2]
   #  /(c.R*T*RHOAT*Dd))*(nw/(nw+ns))
@@ -573,15 +574,17 @@ def SVP_GASES(SV_dict, T, n_sv):
     
     
 def SVGROWTHRATE(T, P, SVP_ORG, RH, RH_EQ,DIAM, n_sv):
-    RAD = DIAM/2
+    sv_growthrate = np.zeros([n.n_sv, n.nbins*n.nmodes])
     
+    RAD = DIAM/2
     D1 = Diff(T,P)
     
     MOLW = [c.semi_vol_dict[key][0] for key in list(c.semi_vol_dict.keys())[:n_sv]]
+    # shapes of RAD and RH_EQ are not indexed correctly (DW[n.n_sv,n.nbins*n.nmodes], RH_EQ[2,2,n.nbins*n.nmodes])
+    for j in range(n.n_sv):
+        sv_growthrate[j,:] = 4*np.pi*RAD[j,:]*D1*(RH[j] - RH_EQ[j,:])*SVP_ORG[j]/(c.R/MOLW[j]*T)
     
-    sv_growthrate = [4*np.pi*RAD*D1*(RH[i] - RH_EQ[i])*SVP_ORG[i]/(c.R/MOLW[i]*T) for i in range(n_sv)]
-    
-    return sv_growthrate
+    return np.reshape(sv_growthrate,[n.nbins*n.nmodes*n.n_sv])
     
     
    
@@ -602,7 +605,7 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
     for mode in range(n.nmodes):
         for i in range(n.ncomps):
             new_aerosol_mass_frac[i,mode,:] = (solid_aerosol_mass_ncomp[i,mode,:]/
-                                           (solid_aerosol_mass[mode,:]+np.sum(semi_vol_condensed_mass[:,mode,:],axis=1))) # this is the problem for running with > 1 modes
+                                           (solid_aerosol_mass[mode,:]+np.sum(semi_vol_condensed_mass[:,mode,:],axis=0))) # this is the problem for running with > 1 modes
         for j in range(n.n_sv):
             sv_mass_frac[j,mode,:] = (semi_vol_condensed_mass[j,mode,:]/
                                      (solid_aerosol_mass[mode,:]+semi_vol_condensed_mass[j,mode,:]))
