@@ -665,14 +665,14 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
     kappa_new = np.sum(new_aerosol_vol_frac*kappa_bin,axis=0) # sum over all components
     sv_kappa_new = np.sum(sv_vol_frac*sv_kappa_bin,axis=0) # sum over all components
     
-    total_new_kappa = kappa_new + sv_kappa_new
+   # total_new_kappa = kappa_new + sv_kappa_new
     
     kappa_new = (np.sum(solid_aerosol_mass_ncomp/rho_bin*kappa_bin,axis=0)/
                    np.sum(solid_aerosol_mass_ncomp/rho_bin,axis=0))
     sv_kappa_new =( np.sum(semi_vol_condensed_mass/sv_rho_bin*sv_kappa_bin,axis=0)/
                      np.sum(semi_vol_condensed_mass/sv_rho_bin,axis=0))
     
-  #  total_new_kappa = kappa_new + sv_kappa_new
+    #total_new_kappa = kappa_new + sv_kappa_new
   
     
     return total_new_kappa

@@ -317,7 +317,7 @@ for idx in range(len(output)):
     # initialize output with starting values from namelist 
     if idx == 0: 
         if n.SV_flag:
-            Y[INDSV1:INDSV2] = np.tile(Y_AER[0,:]*0.5,n.n_sv) # this is wrong
+            Y[INDSV1:INDSV2] = np.tile(Y_AER[0,:]*0.25,n.n_sv) # this is wrong
         else:
             Y[INDSV1:INDSV2] = 0.0 
       #  Y[INDSV1+IND1:INDSV2] = Y_AER[0,:]
@@ -334,6 +334,7 @@ for idx in range(len(output)):
         # update mass of aerosol particles in bins, add on condensed semi-vol mass
         if n.SV_flag:
             new_kappa = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])
+            print(new_kappa)
             # add all of condensed mass onto non-volatile aerosol
             Y_AER[idx,:] = Y_AER[idx-1,:] + np.sum(np.reshape(output[idx,INDSV1:INDSV2],[n.n_sv,IND1]),axis=0)
            # new_kappa = np.zeros([n.nmodes, n.nbins])
