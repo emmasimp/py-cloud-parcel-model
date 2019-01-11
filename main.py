@@ -30,7 +30,7 @@ importlib.reload(v)
 [nbins, nmodes, simulation_type, PRESS1, PRESS2, w, rhobin, molwbin,nubin, Kappa,
 Temp1, Temp2, Y, ERROR_FLAG, Y_AER, CDP_CONC_liq, CDP_CONC_ice, CDP_CONC_total,
 YICE_AER, alpha_crit, ncomps, output, output_ice, dummy2, ACT_DROPS, setup_output, 
-Heterogeneous_freezing_criteria, Mass_frac, rho_sv] = v.run()
+Heterogeneous_freezing_criteria, Mass_frac, Mass_frac_aer] = v.run()
 dt = 1
 #### INDEXES ############
 IND1 = nbins*nmodes # index for mass
@@ -81,27 +81,23 @@ def run_sim(Y,time,Y_AER1, YICE):
         else:
             print('simulation type unknown')
             return
-
+        
 # ----------------------------change in vapour content: -----------------------
         # 1. equilibruim size of particles
-     #   if n.SV_flag:
-     
-        Kappa = np.reshape(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]),[n.nbins*n.nmodes]) # this isnt working with n_sv > 1
-        # test = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])
-      #  else:
-       #     output[idx,INDSV1:INDSV2] = 0.0
-      #      Kappa = np.reshape(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]),[n.nbins*n.nmodes])
-
-     #   print(f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2]))    
-        KK01 = f.kk01(Y[0:IND1], Y[ITEMP], Y_AER1, 
+        if n.SV_MF > 0.0:
+            Kappa_sv = np.reshape(f.kappa_recalc(Y_AER1,Y[INDSV1:INDSV2])[0],[n.nbins*n.nmodes]) 
+            KK01 = f.kk01(Y[0:IND1], Y[ITEMP], Y_AER1, 
+                      rhobin, Kappa_sv)
+        else:
+            KK01 = f.kk01(Y[0:IND1], Y[ITEMP], Y_AER1, 
                       rhobin, Kappa)
+            
         Dw = KK01[2]    # wet diameter
         RHOAT = KK01[1] # density of particles inc water and aerosol mass
         RH_EQ = KK01[0] # equilibrium diameter
 
         # 2. growth rate of particles, Jacobson p455
         # rate of change of radius
-        
         growth_rate = f.DROPGROWTHRATE(Y[ITEMP],Y[IPRESS],SL,RH_EQ,RHOAT,Dw)
         growth_rate[np.isnan(growth_rate)] = 0# get rid of nans
         growth_rate = np.where(Y[IND1:IND2] < 1e-9, 0.0, growth_rate)
@@ -134,17 +130,12 @@ def run_sim(Y,time,Y_AER1, YICE):
                      WV*Y[IPRESS]*derivative(f.svp_liq,Y[ITEMP],dx=1.0)
                      *dy_dt[ITEMP])
         dy_dt[IRH] = dy_dt[IRH]/(c.eps*svp1**2)
-
 # -----------------------------------------------------------------------------
         
 # ------------------------------ SEMI-VOLATILES -------------------------------
-        if n.SV_flag: # WARNING ONLY WORKS WITH ONE MODE AND ONE SV COMPOSITION !!!!!!!!!!!!
+        if n.SV_MF > 0.0: 
             SV_mass = np.reshape(Y[INDSV1:INDSV2],[n.n_sv,n.nmodes*n.nbins])
-
-          #  total_mass = Y_AER1 + sum([SV_mass[comp,:,:] for comp in range(n.n_sv)]) 
-           # total_mass = np.reshape(np.reshape(Y_AER1,[n.nmodes,n.nbins]) + np.sum(SV_mass,axis=1),[n.nbins*n.nmodes]) # this needs checking!!!!!
             total_mass = Y_AER1 + np.sum(SV_mass,axis=0)
-    #        SV_mass = np.reshape(Y[INDSV1:INDSV2],[n.n_sv,n.nbins*n.nmodes])
 
             ave_molwbin = ((Y_AER1/total_mass)*molwbin) + [(SV_mass[i, :]/total_mass)*c.semi_vol_dict[key][0] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]         
             ave_rhobin = ((Y_AER1/(total_mass+Y[:IND1]))*rhobin + (Y[:IND1]/(total_mass+Y[:IND1]))*c.mw) +[(SV_mass[i, :]/(total_mass+Y[:IND1]))*c.semi_vol_dict[key][1] for i,key in zip(range(n.n_sv),list(c.semi_vol_dict.keys())[:n.n_sv])]
@@ -161,10 +152,9 @@ def run_sim(Y,time,Y_AER1, YICE):
             RH_ORG = [(x/c.semi_vol_dict[key][0])*c.R*Y[ITEMP] for x, key in zip(Y[IRH_SV],list(c.semi_vol_dict.keys())[0:n.n_sv])] # just for n_sv keys in dictionary
             RH_ORG = [RH_ORG[x]/SVP_ORG[x] for x in range(n.n_sv)]
             dy_dt[INDSV1:INDSV2] = f.SVGROWTHRATE(Y[ITEMP], Y[IPRESS], SVP_ORG,
-                                                  RH_ORG, RH_EQ[0],DW, n.n_sv)#[0][0] # this isnt working with n_sv > 1
+                                                  RH_ORG, RH_EQ[0],DW, n.n_sv)
             
             dy_dt[IRH_SV] = -np.sum(np.reshape(dy_dt[INDSV1:INDSV2],[n.n_sv,IND1])*Y[IND1:IND2],axis=1)
-
         return dy_dt
     
 #--------------------- SET-UP solver ------------------------------------------
@@ -316,47 +306,31 @@ for idx in range(len(output)):
          break
     # initialize output with starting values from namelist 
     if idx == 0: 
-        if n.SV_flag:
-            Y[INDSV1:INDSV2] = np.tile(Y_AER[0,:]*0.25,n.n_sv) # this is wrong
+
+        if n.SV_MF > 0.0:
+            Y[INDSV1:INDSV2] = np.tile(Y_AER[0,:]*n.SV_MF,n.n_sv) # this is correct
         else:
             Y[INDSV1:INDSV2] = 0.0 
-      #  Y[INDSV1+IND1:INDSV2] = Y_AER[0,:]
 
         Y[IRH_SV] = 0.5e-9 # 
         output[idx,:] = Y
         
         output_file = setup_output()
+
         
-        #output_file['ice_total'][idx,:] = np.sum(output[idx,:])
     else:
         # solve warm cloud ODEs
         output[idx,:], test_time = run_sim(output[idx-1,:],(idx-1), Y_AER[idx-1,:], output_ice[idx-1,:])
-        # update mass of aerosol particles in bins, add on condensed semi-vol mass
-        if n.SV_flag:
-            new_kappa = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])
-            print(new_kappa)
-            # add all of condensed mass onto non-volatile aerosol
-            Y_AER[idx,:] = Y_AER[idx-1,:] + np.sum(np.reshape(output[idx,INDSV1:INDSV2],[n.n_sv,IND1]),axis=0)
-           # new_kappa = np.zeros([n.nmodes, n.nbins])
-            SV_mass = np.reshape(output[idx-1,INDSV1:INDSV2],[n.n_sv,n.nmodes, n.nbins])
-
-            #for i in range(n.nmodes):
-             #   new_kappa[i,:] = ((sum(n.Mass_frac[key][i]/c.aerosol_dict[key][1]*c.aerosol_dict[key][3] for key in list(n.Mass_frac.keys())[:-3])
-              #          +sum(SV_mass[j,i,:]/c.semi_vol_dict[key][1]*c.semi_vol_dict[key][3] for j,key in enumerate(list(c.semi_vol_dict.keys())[:n.n_sv])))
-               #        /(sum(n.Mass_frac[key][i]/c.aerosol_dict[key][1] for key in list(n.Mass_frac.keys()))
-                 #       +sum(SV_mass[j,i,:]/c.semi_vol_dict[key][1] for j, key in enumerate(list(c.semi_vol_dict.keys())[:n.n_sv]))))
-           # pri#nt(Kappa)
-         #   Kappa = np.reshape(new_kappa, [IND1])
-          #  print(Kappa)
-            # need to update rhobin, molwbin, kappa now that semi-vol have condensed
-            # need to update Mass_frac then redo rhobin, molwbin and kappabin calculations from variables
-            # these need to be passed into dy_dt_func to be used in calc of RH_EQ etc
-          #  new_mass_frac = 
-        else:
-            Y_AER[idx,:] = Y_AER[idx-1,:]
-# -------------------- calculate the number of activated drops ----------------------
+        Y_AER[idx,:] = Y_AER[idx-1,:]
+        # -------------------- calculate the number of activated drops ----------------------
         # 1. find mass for activation
-        ACT_MASS = f.find_act_mass(Y_AER[idx,:], output[idx,ITEMP], nbins, nmodes, rhobin, Kappa)
+        if n.SV_MF > 0.0:
+            new_kappa = f.kappa_recalc(Y_AER[0,:],output[idx,INDSV1:INDSV2])[0] # this is correct!
+            new_kappa = np.reshape(new_kappa,[n.nbins*n.nmodes])
+            SV_mass = np.reshape(output[idx-1,INDSV1:INDSV2],[n.n_sv,n.nmodes, n.nbins])
+            ACT_MASS = f.find_act_mass(Y_AER[idx,:], output[idx,ITEMP], nbins, nmodes, rhobin, new_kappa)
+        else:
+            ACT_MASS = f.find_act_mass(Y_AER[idx,:], output[idx,ITEMP], nbins, nmodes, rhobin, Kappa)
         # 2. find the number of aerosol with water mass greater than mass for activation 
         ACT_DROPS[idx,:] = np.where(output[idx,:IND1] > ACT_MASS, 
                                     output[idx,IND1:IND2], 0.0)
@@ -378,7 +352,7 @@ for idx in range(len(output)):
                     Heterogeneous_freezing_criteria, Mass_frac)
             
             output_ice[idx,:IND1]     = icenuc[0] # ice mass
-            YICE_AER[idx,:]         = icenuc[1] # aerosol mass in ice 
+            YICE_AER[idx,:]           = icenuc[1] # aerosol mass in ice 
             output_ice[idx,IND1:IND2] = icenuc[2] # ice number
             output[idx,IND1:IND2]     = icenuc[3] # liquid number
             Y_AER[idx,:] = Y_AER[idx-1,:]
@@ -463,27 +437,27 @@ if not ERROR_FLAG:
         
      ax1 = fig.add_subplot(221)
      ax1.plot(np.sum(ACT_DROPS, axis=1)/1e6,label='py')
-    # ax1.plot(nc['TIMES'],nc['NDROP'][:,0,0,0]/1e6, label = 'ACPIM')
+     ax1.plot(nc['TIMES'],nc['NDROP'][:,0,0,0]/1e6, label = 'ACPIM')
      ax1.set_title('Activated Drops')
      ax1.set_ylabel('# cm$^{-3}$')
-     #ax1.legend()
+    # ax1.legend()
      # 
      ax2 = fig.add_subplot(222)
      ax2.plot(np.sum(output_ice[:,IND1:IND2], axis=1)/1e6)
-     #ax2.plot(nc['TIMES'],nc['NICE'][:,0,0,0]/1e6)
+   #  ax2.plot(nc['TIMES'],nc['NICE'][:,0,0,0]/1e6)
      # ax2.plot(obs)
      ax2.set_title('Ice Number Concentration')
      ax1.set_ylabel('# cm$^{-3}$')
      # 
      ax3 = fig.add_subplot(223)
      ax3.plot(output[:,IRH])
-     #ax3.plot(nc['TIMES'],nc['RH'][:,0,0,0])
+     ax3.plot(nc['TIMES'],nc['RH'][:,0,0,0])
      ax3.set_title('RH')
      ax3.set_xlabel('Time (s)')
      # 
      ax4 = fig.add_subplot(224)
      ax4.plot(output[:,ITEMP]-273.15)
-     #ax4.plot(nc['TIMES'],nc['TEMP'][:,0,0,0]-273.15)
+     ax4.plot(nc['TIMES'],nc['TEMP'][:,0,0,0]-273.15)
      ax4.set_title('Temperature')
      ax4.set_xlabel('Time (s)')
      # 

@@ -15,11 +15,11 @@ nmodes	= 2
 ncomps = 9
 n_sv = 2
 #nmoms	= 2 # number of moments, double moment mass and number, move this to variables.py, not sure this variable does anything any more ...
-NAER 	=  [900e6, 	55e6, 		9200e6, 	0, 0]
+NAER 	=  [5000e6, 	55e6, 		9200e6, 	0, 0]
 D_AER 	=  [350e-9, 1500e-9,	222e-9, 	0, 0]
 sig	    =  [0.45,	0.4,		0.43, 		0, 0]
 
-Mass_frac = {'ammonium sulphate': [0.5,   0.5],
+Mass_frac = {'ammonium sulphate': [0.2,   0.2],
             'sea salt':           [0.0,   0.0],
             'sulphuric acid':     [0.0,   0.0],
             'fulvic acid':        [0.0,   0.0],
@@ -28,27 +28,23 @@ Mass_frac = {'ammonium sulphate': [0.5,   0.5],
             'Feldspar':           [0.0,   0.0],
             'Illite' :            [0.0,   0.0],
             'Bio' :               [0.0,   0.0],
-            'test' :              [0.0,   0.0],
-            'SV01':               [0.25,  0.25],
-            'SV02':               [0.25,  0.25],
-            'SV03':               [0.0,   0.0]} # to add another aerosol type change 'test' 
-                                          # to name of new aerosol type
+            'test' :              [0.0,   0.0]}
 
-sv_mass_frac = {'SV01': [0.25,0.25],#this important! used in recalc_kappa
-                'SV02': [0.25,0.25],
-                'SV03': [0.0,0.0]}
+semi_vols = ['SV01','SV02']                                         # to name of new aerosol type
+SV_MF = 0.4
 
-RH = 0.95
+
+RH = 0.98
 T = 280
 P = 100700
 w = 5
-runtime = 4
+runtime = 20
 
 # choose type of simulation
 simulation_type = 'chamber' # parcel or chamber
 
 # semi-volatile flag
-SV_flag = True
+#SV_flag = True
 
 # choose criteria for heteogeneous freezing
 Heterogeneous_freezing_criteria = 'RH>1' # activation, RH or critical mass of water

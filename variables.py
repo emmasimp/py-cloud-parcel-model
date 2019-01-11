@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 import os
 import subprocess
 import pickle
+import copy
 
 #import namelist as n
 import constants as c
@@ -81,8 +82,17 @@ def run():
 
     ACT_DROPS = zeros([int(t_final/dt),IND1])
     ncomps = len(n.Mass_frac)
-
-
+    
+    n.Mass_frac_aer = copy.deepcopy(n.Mass_frac)
+    
+    # make dictionaries of mass fractions #######################
+    
+    n.sv_mass_frac = {}
+    for i in n.semi_vols[:n.n_sv]:
+        n.Mass_frac[i] = [n.SV_MF]*n.nmodes
+        n.sv_mass_frac[i] = [n.SV_MF]*n.nmodes
+    ############################################################
+    
     # Add in new aerosol types from user ------------------------------------------
     if ncomps > len(c.aerosol_dict):
         for key in n.Mass_frac:
@@ -141,35 +151,36 @@ def run():
     # --------- catch error if sum of mass fractions is greater than 1 ------------
     total = zeros(nmodes)
 
-    for mode in range(nmodes):
-        for key in list(n.Mass_frac.keys())[:]:
-            total[mode] += n.Mass_frac[key][mode]
-        if total[mode] != 1:
-            print('ERROR - Simulation Stopped')
-            print('sum of mass fractions in mode', mode+1, 'does not equal 1')
-            print(n.Mass_frac)
-            ERROR_FLAG = True
-            break
-        else:
-            ERROR_FLAG = False
-            continue
+  #  for mode in range(nmodes):
+   #     for key in list(n.Mass_frac.keys())[:]:
+    #        total[mode] += n.Mass_frac[key][mode]
+     #   if total[mode] != 1:
+      #      print('ERROR - Simulation Stopped')
+       #     print('sum of mass fractions in mode', mode+1, 'does not equal 1')
+        #    print(n.Mass_frac)
+         #   ERROR_FLAG = True
+          #  break
+        #else:
+         #   ERROR_FLAG = False
+          #  continue
 
-            
+    ERROR_FLAG = False        
     # -----------------------------------------------------------------------------
     nu = zeros_like(k)
     nubin = zeros_like(rhobin)
-    rho_sv = zeros_like(rhobin)
+ #   rho_sv = zeros_like(rhobin)
      # calculate average values for each mode
     for mode in range(nmodes):
-        total_moles = sum([n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0] for key in c.aerosol_dict.keys()]) # mole weighted kappa
+        total_moles = sum([n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0] for key in n.Mass_frac.keys()]) # mole weighted kappa
        
-        k[mode] = sum([(n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0]/total_moles)*c.aerosol_dict[key][3] for key in c.aerosol_dict.keys()]) # mole weighted kappa
-        nu[mode] = sum([(n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0]/total_moles)*c.aerosol_dict[key][2] for key in c.aerosol_dict.keys()]) # mole weighted kappa
+        k[mode] = sum([(n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0]/total_moles)*c.aerosol_dict[key][3] for key in n.Mass_frac.keys()]) # mole weighted kappa
+        nu[mode] = sum([(n.Mass_frac[key][mode]*100/c.aerosol_dict[key][0]/total_moles)*c.aerosol_dict[key][2] for key in n.Mass_frac.keys()]) # mole weighted kappa
 
    #     k[mode] = sum([n.Mass_frac[key][mode]*c.aerosol_dict[key][3] for key in c.aerosol_dict.keys()])
-        rhoa[mode] = 1/sum([n.Mass_frac[key][mode]/c.aerosol_dict[key][1] for key in c.aerosol_dict.keys()])
-        molw_aer[mode] = sum([n.Mass_frac[key][mode]*c.aerosol_dict[key][0] for key in c.aerosol_dict.keys()])
-        rho_sv[mode] = 1/sum([n.sv_mass_frac[key][mode]*c.semi_vol_dict[key][1] for key in n.sv_mass_frac.keys()])
+        rhoa[mode] = 1/sum([n.Mass_frac[key][mode]/c.aerosol_dict[key][1] for key in n.Mass_frac.keys()])
+        molw_aer[mode] = sum([n.Mass_frac[key][mode]*c.aerosol_dict[key][0] for key in n.Mass_frac.keys()])
+        #rho_sv[mode] = 1/sum([n.sv_mass_frac[key][mode]*c.semi_vol_dict[key][1] for key in n.sv_mass_frac.keys()])
+        
                                         
     for i in range(nmodes):
         rhobin[i*nbins:nbins+nbins*i] = rhoa[i]
@@ -191,9 +202,9 @@ def run():
         ind2 = ind1+nbins
         Kappa[mode] = sum([n.Mass_frac[key][mode]*Y_AER[0,ind1:ind2]/
                              c.aerosol_dict[key][1]*c.aerosol_dict[key][3] for key
-                             in c.aerosol_dict.keys()])/sum([n.Mass_frac[key][mode]
+                             in n.Mass_frac.keys()])/sum([n.Mass_frac[key][mode]
                              *Y_AER[0,ind1:ind2]/c.aerosol_dict[key][1] for key
-                             in c.aerosol_dict.keys()])
+                             in n.Mass_frac.keys()])
 
     Kappa = reshape(Kappa,[nbins*nmodes])
 
@@ -223,7 +234,7 @@ def run():
         
         output_file.createVariable('CDP_CONC_total',float32,dimensions=('time','CDP_bins'))
         return output_file
-    return nbins, nmodes, n.simulation_type, n.PRESS1, n.PRESS2, n.w, rhobin, molwbin, nubin, Kappa,n.Temp1, n.Temp2, Y, ERROR_FLAG, Y_AER, CDP_CONC_liq, CDP_CONC_ice, CDP_CONC_total,YICE_AER, n.alpha_crit, ncomps, output, output_ice, dummy2, ACT_DROPS, setup_output, n.Heterogeneous_freezing_criteria, n.Mass_frac, rho_sv
+    return nbins, nmodes, n.simulation_type, n.PRESS1, n.PRESS2, n.w, rhobin, molwbin, nubin, Kappa,n.Temp1, n.Temp2, Y, ERROR_FLAG, Y_AER, CDP_CONC_liq, CDP_CONC_ice, CDP_CONC_total,YICE_AER, n.alpha_crit, ncomps, output, output_ice, dummy2, ACT_DROPS, setup_output, n.Heterogeneous_freezing_criteria, n.Mass_frac, n.Mass_frac_aer
 
 
 if __name__ == "__main__":

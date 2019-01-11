@@ -168,6 +168,7 @@ def kk01(MWAT, T, mass_bin_centre, rhobin, kappabin):
     
     RHOAT = MWAT/c.rhow+(mass_bin_centre/rhobin)
     RHOAT = (MWAT+(mass_bin_centre))/RHOAT
+    
    # RHOAT = c.rhow
     #RHOAT = 1690 
     
@@ -598,8 +599,8 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
     sv_mass_frac = np.zeros([n.n_sv,n.nmodes, n.nbins])
     
     for mode in range(n.nmodes):
-        for i,key in enumerate(list(n.Mass_frac.keys())[:n.ncomps]):
-            solid_aerosol_mass_ncomp[i,mode,:] = solid_aerosol_mass[mode,:]*n.Mass_frac[key][mode]
+        for i,key in enumerate(list(n.Mass_frac_aer.keys())[:n.ncomps]):
+            solid_aerosol_mass_ncomp[i,mode,:] = solid_aerosol_mass[mode,:]*n.Mass_frac_aer[key][mode]
             
     
     for mode in range(n.nmodes):
@@ -622,7 +623,7 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
     sv_rho_bin = np.zeros([n.n_sv,n.nmodes,n.nbins])
 
     for m in range(n.nmodes):
-          for i,key in enumerate(list(n.Mass_frac.keys())[:n.ncomps]):
+          for i,key in enumerate(list(n.Mass_frac_aer.keys())[:n.ncomps]):
               molw_bin[i,m,:] = c.aerosol_dict[key][0]
               kappa_bin[i,m,:] = c.aerosol_dict[key][3]
               rho_bin[i,m,:] = c.aerosol_dict[key][1]
@@ -663,9 +664,12 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
                                      (total_aerosol_vol[mode,:]+total_sv_vol[mode,:]))
     
     kappa_new = np.sum(new_aerosol_vol_frac*kappa_bin,axis=0) # sum over all components
-    sv_kappa_new = np.sum(sv_vol_frac*sv_kappa_bin,axis=0) # sum over all components
+    rhoat_new = np.sum(new_aerosol_mole_frac*rho_bin,axis=0)
+    sv_kappa_new = np.sum(sv_vol_frac*sv_kappa_bin,axis=0)
+    sv_rhoat_new = np.sum(sv_mole_frac*sv_rho_bin,axis=0)# sum over all components
     
-   # total_new_kappa = kappa_new + sv_kappa_new
+    total_new_kappa = kappa_new + sv_kappa_new
+    total_new_rhoat= rhoat_new + sv_rhoat_new
     
     kappa_new = (np.sum(solid_aerosol_mass_ncomp/rho_bin*kappa_bin,axis=0)/
                    np.sum(solid_aerosol_mass_ncomp/rho_bin,axis=0))
@@ -675,7 +679,7 @@ def kappa_recalc(aerosol_mass,condensed_semi_vol ):
     #total_new_kappa = kappa_new + sv_kappa_new
   
     
-    return total_new_kappa
+    return total_new_kappa, total_new_rhoat
       
 
     
