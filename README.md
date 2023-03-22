@@ -6,5 +6,5 @@ Simple parcel model that calculates pressure, temperature, RH and the growth of 
 
 How to use:
 1. Install anaconda 3
-2. Create an ananconda environment using the pyacpim_v5.yml file (eg $ conda env create -f pyacpim_v5.yml)
-3. Enter the new pyacpim_v5 environment and run pyACPIM.py (eg $ source activate pyacpim_v5, $ python pyACPIM.py)
+2. Create an ananconda environment using the pyacpim_env.yml file (eg $ conda env create -f pyacpim_env.yml)
+3. Enter the new pyacpim environment and run pyACPIM.py (eg $ source activate pyacpim, $ python pyACPIM.py)
