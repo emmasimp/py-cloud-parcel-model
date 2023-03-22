@@ -60,8 +60,8 @@ class main_window(QtWidgets.QMainWindow):
         self.tab_widget.addTab(self.tab3,'Advanced Settings')
         # set the style sheet for the GUI
         self.setStyleSheet(self.getStyleSheet('./stylesheet.qss'))
-
         self.submit_clicked_has_happend = False
+
 
         # Create widgets
         # column 1

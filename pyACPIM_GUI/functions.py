@@ -339,16 +339,13 @@ def icenucleation(MWAT, MBIN2, n_aer_bin, T, P,
 
     if Heterogeneous_freezing_criteria.lower() == 'activated drops':
         NS[:] = np.where(MWAT < mass_for_act , 0.0, NS) # this is not the problem for ice number agreeing with ACPIM
-    elif Heterogeneous_freezing_criteria.lower() ==  'rh>1  [default]':
-
+    elif Heterogeneous_freezing_criteria.lower() ==  'rh>1':
         if RH < 1.0:
             NS[:] = 0.0
     elif Heterogeneous_freezing_criteria.lower() == 'threshold water mass':
         NS[:] = np.where(MWAT < MWAT_CRIT, 0.0, NS) 
     else:
-
-        print('heterogeneous freezing criteria '+ Heterogeneous_freezing_criteria.lower() + 'unknown')
-
+        print('heterogeneous freezing criteria unknown')
         return
       
     #DN01 = (n_aer_bin)*(1e0-np.exp(-NS))
@@ -497,6 +494,10 @@ def calc_CDP_concentration(liq, aer_mass, ice, aer_mass_ice, T, IND1, IND2, rhob
        16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0,
        38.0, 40.0, 42.0, 44.0, 46.0, 48.0, 50.0]
     
+    # FSSP bins
+    #CDP_bins = [5,7,9,11,13,15,17,19,21,23,25,27,29,31,22,35,38,41,44,47]
+
+
     CDP_bins = [x*1e-6 for x in CDP_bins]
 
     CDP_conc_liq = np.zeros([len(CDP_bins)])
@@ -531,13 +532,15 @@ def calc_CDP_concentration(liq, aer_mass, ice, aer_mass_ice, T, IND1, IND2, rhob
             CDP_conc_ice[x] = num_bin_ice[x]
             
     CDP_conc_total = CDP_conc_liq + CDP_conc_ice 
-
+    
+    
     return CDP_conc_liq, CDP_conc_ice, CDP_conc_total
 
     
    
     
 
+    
     
     
     

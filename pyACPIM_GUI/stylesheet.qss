@@ -4,7 +4,7 @@ QPushButton, QComboBox, QCheckBox, QInputDialog{
 				background-color: #4c4c4c;
 				color: #d1cfcf;
 				min-width: 150px;
-				max-width: 400px;
+				max-width: 200px;
 				outline: 0;
 				}
 				
@@ -29,11 +29,6 @@ QPushButton, QComboBox, QCheckBox, QInputDialog{
 				min-width: 15em;
 				}
 
-             /*   QTabBar::tab { 
-                 height: 50px;
-                width: 500px; 
-                 }*/
-
 
 				QComboBox::drop-down {
     			subcontrol-origin: padding;
@@ -53,7 +48,6 @@ QPushButton, QComboBox, QCheckBox, QInputDialog{
 
 				QTabWidget::pane{
 				border-top: 2px solid #4c4c4c;
-                min-width: 40px;
 				}
 				QTabBar::tab{
 				background:#4c4c4c;
@@ -98,7 +92,7 @@ QPushButton, QComboBox, QCheckBox, QInputDialog{
                 background: #4c4c4c;
                 color: #d1cfcf;
                 min-width: 80px;
-                max-width: 200px;
+                max-width: 100px;
                 }
                 QLineEdit#updraft{
                 max-width: 10px
@@ -114,7 +108,7 @@ QPushButton, QComboBox, QCheckBox, QInputDialog{
                 background-color: #d1cfcf;
                 }*/
                 QTabWidget {
-                  /*  max-width: 600px;*/
+                    max-width: 600px;
                     min-width: : 300px}
                 QGroupBox {
                 background-color: #4c4c4c;

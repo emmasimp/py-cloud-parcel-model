@@ -265,7 +265,7 @@ def run(Pbar):
         if idx == 0: 
             output[idx,:] = Y
             output_file = setup_output()
-            #print(Y_AER[idx,:])
+            print(Y_AER[idx,:])
             #output_file['ice_total'][idx,:] = np.sum(output[idx,:])
         else:
             # solve warm cloud ODEs
@@ -343,34 +343,28 @@ def run(Pbar):
                         output[idx,:IND2], Y_AER[idx,:], 
                         output_ice[idx,:IND2], YICE_AER[idx,:], output[idx,ITEMP],
                         IND1, IND2, rhobin)
-            # calculate rhoat
-            rho_out = output[idx,:IND1]/c.rhow+(Y_AER[idx,:]/rhobin)
-            rho_out = (output[idx,:IND1]+(Y_AER[idx,:]))/rho_out
-            #print(rho_out)
+            
             # write to netcdf output file
-            output_file['ice_total'][idx] = sum(output_ice[idx,IND1:IND2])*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
-            output_file['drop_total'][idx] = sum(ACT_DROPS[idx,:])*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
-            output_file['liq_total'][idx] = sum(output[idx,IND1:IND2])*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
+            output_file['ice_total'][idx] = sum(output_ice[idx,IND1:IND2])
+            output_file['drop_total'][idx] = sum(ACT_DROPS[idx,:])
+            output_file['liq_total'][idx] = sum(output[idx,IND1:IND2])
             output_file['temperature'][idx] = output[idx,ITEMP]
             output_file['pressure'][idx] = output[idx,IPRESS]
             output_file['RH'][idx] = output[idx,IRH]
             output_file['CDP_CONC_total'][idx] = CDP_CONC_total[idx,:]
-            output_file['liquid_water_content'][idx] = np.sum(output[idx,IND1:IND2]*output[idx,:IND1])*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
+            output_file['liquid_water_content'][idx] = np.sum(output[idx,IND1:IND2]*output[idx,:IND1])
             output_file['ice_water_content'][idx] = np.sum(output_ice[idx,IND1:IND2]*output_ice[idx,:IND1])
             
-
             for mode in range(nmodes):
                 start  = IND1+mode*nbins
                 end = start+nbins
-                output_file['ice_number'][idx,mode,:] = output_ice[idx,start:end]*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
-                output_file['liq_number'][idx,mode,:] = output[idx,start:end]*output[idx,IPRESS]/c.RA/output[idx,ITEMP]
-
+                output_file['ice_number'][idx,mode,:] = output_ice[idx,start:end]
+                output_file['liq_number'][idx,mode,:] = output[idx,start:end]
                 start2 = mode*nbins
                 end2 = start2+nbins
                 output_file['ice_mass'][idx,mode,:] = output_ice[idx,start2:end2]
                 output_file['liq_mass'][idx,mode,:] = output[idx,start2:end2]
                 output_file['activated_drops'][idx,mode,:] = ACT_DROPS[idx,start2:end2]
-                output_file['rho'][idx,mode,:] = rho_out[start2:end2]
 
             
            # print(sum(output_ice[idx,IND1:IND2]))
@@ -472,3 +466,4 @@ if __name__ == "__main__":
     # try np.multiply for multipling matrixs instead of for i in mode: for j in bin
 # try numba in last instance for speed up if thats important 
 # try golden optimization method in scipy
+#     
