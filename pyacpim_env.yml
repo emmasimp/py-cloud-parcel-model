@@ -1,0 +1,11 @@
+name: pyacpim
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - assimulo
+  - matplotlib
+  - pyside2
+  - pandas
+  - netcdf4
+prefix: /home/mbexkes3/anaconda3/envs/pyacpim

@@ -1,0 +1,135 @@
+QPushButton, QComboBox, QCheckBox, QInputDialog{
+				border: 2px solid gray;
+				border-radius: 6px;
+				background-color: #4c4c4c;
+				color: #d1cfcf;
+				min-width: 150px;
+				max-width: 400px;
+				outline: 0;
+				}
+				
+				QCheckBox {
+				border: 0px solid #4c4c4c; 
+				}
+				
+				
+				QListView{
+				outline:0;
+				}
+
+				QComboBox { 
+				combobox-popup: 0;
+				color: #d1cfcf;
+				padding: 1px 1px 1px 1px; 
+				min-width: 25px
+				}
+				QComboBox QListView {
+				background-color: #4c4c4c;
+				color: #d1cfcf;
+				min-width: 15em;
+				}
+
+             /*   QTabBar::tab { 
+                 height: 50px;
+                width: 500px; 
+                 }*/
+
+				QComboBox::drop-down {
+    			subcontrol-origin: padding;
+    			subcontrol-position: top right;
+    			width: 10px;
+    			background-color: gray;
+    			border-left-width: 1px;
+    			border-left-color: #4c4c4c;
+    			border-left-style: solid; /* just a single line */
+    			border-top-right-radius: 3px; /* same radius as the QComboBox */
+    			border-bottom-right-radius: 3px;
+    			}
+
+				QPushButton::hover{
+				border: #4c4c4c;
+				}
+
+				QTabWidget::pane{
+				border-top: 2px solid #4c4c4c;
+                min-width: 40px;
+				}
+				QTabBar::tab{
+				background:#4c4c4c;
+				color: #d1cfcf;
+                border: 2px solid gray;
+                border-bottom-color: #4c4c4c;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                min-width: 8px;
+                padding: 2px;
+                }
+                
+                QTabBar::tab:selected {
+                border-color: #4c4c4c;
+                border-bottom-color: #4c4c4c;
+
+                }
+                QTabBar::tab:!selected {
+                margin-top: 3px ; /* make non-selected tabs look smaller */
+                }
+                QLabel{
+                color: #d1cfcf;
+                }
+                QRadioButton, QCheckBox{
+                background-color: #4c4c4c;
+                color: #d1cfcf;
+                }
+                
+                QCheckBox::indicator {
+                border: 2px solid gray;
+                background: none;
+
+                }
+                QCheckBox::indicator:checked{
+                background: #f3982e;
+                }
+
+                QLineEdit {
+                border: 2px solid gray;
+                border-radius : 10px;
+                padding: 0 8px;
+                background: #4c4c4c;
+                color: #d1cfcf;
+                min-width: 80px;
+                max-width: 200px;
+                }
+                QLineEdit#updraft{
+                max-width: 10px
+                }
+                QLineEdit#simulation_start_time{max-width: 600px}
+            	
+            	/*QGroupBox{border:1px solid gray;border-radius:9px;margin-top: 0.5em;}")*/
+
+             /*   QProgressBar {
+                border: 2px solid grey;
+                border-radius: 5px;
+                padding: 1px 1px 1px;
+                background-color: #d1cfcf;
+                }*/
+                QTabWidget {
+                  /*  max-width: 600px;*/
+                    min-width: : 300px}
+                QGroupBox {
+                background-color: #4c4c4c;
+                border : 1px solid gray;
+                border-radius: 9px;
+                padding: 1px 1px 1px 1px;
+                margin-top: 0.5em;
+                color: #d1cfcf;
+                }
+
+                QGroupBox::title{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+                }
+
+            	QGroupBox{border:1px solid gray;border-radius:9px;margin-top: 0.5em;}")
+
+
